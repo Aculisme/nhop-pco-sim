@@ -17,4 +17,7 @@ Multi-hop Pulse-Coupled Oscillators Simulation
 - and PCO + message suppression
 - and PCO + MS + SPR/LPR
 
+# plan:
 
+- start with a simple PCO simulation
+  -  
