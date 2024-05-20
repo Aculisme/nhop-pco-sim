@@ -15,6 +15,7 @@ import time
 
 from pcoNode8 import reception_probability, distance_euc, InitState, Logging, PCONode8, Results, \
     RESULTS_CSV_HEADER
+from randomizedPcoNode9 import RandomizedPCONode9
 
 
 @dataclass
@@ -115,7 +116,7 @@ def run_trial(trial_config):
 
     env = simpy.Environment()
     # Create Nodes
-    nodes = [PCONode8(env, init_state, logging) for init_state in init_states]
+    nodes = [RandomizedPCONode9(env, init_state, logging) for init_state in init_states]
 
     for i, node in enumerate(nodes):
         node.neighbors = [nodes[n] for n in range(len(nodes)) if n != i]  # [nodes[n] for n in topo[i]]
@@ -208,7 +209,7 @@ def run_trial(trial_config):
         ax[2].legend(loc="upper right")
 
         fig.suptitle(
-            'Modified PCO Node Simulation for a ' + topo.__name__ + ' topology with ' + str(
+            'Randomized PCO (Schmidt et al.) Node Simulation for a ' + topo.__name__ + ' topology with ' + str(
                 trial_config.num_nodes) + ' nodes')
 
         # Phase difference
@@ -311,7 +312,7 @@ randomized_pco_config = TrialConfig(
     reception_loop_ticks=100,
     default_period_length=100 * 1000,
     sim_time=2000 * 1000,
-    ms_prob=0.8,
+    ms_prob=1.0,
     m_to_px=90,
     distance_exponent=15,
     clock_drift_rate_offset_range=100,
@@ -324,12 +325,12 @@ randomized_pco_config = TrialConfig(
     file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
     num_trials=1,  #
     num_nodes=21,  #
-    topo=nx.barbell_graph,
+    topo=nx.barbell_graph,  # nx.complete_graph,
 
     # Setting random_seed will fix all trials to use the exact same random seed. If argument not passed, then each trial
     # will use a different time-based random seed.
     # random_seed=0,
-    topo_params={'m1': 10, 'm2': 1}
+    topo_params={'m1': 10, 'm2': 1} #seed
 )
 
 
@@ -366,8 +367,7 @@ def main(config):
 
 if __name__ == '__main__':
     # todo: make separate file for each or not? give them a name property?
-    # print("testing default (100% ms) config")
-    # main(default_config)
+    print("testing randomized pco config")
     main(randomized_pco_config)
     # print("testing 90% ms prob config")
     # main(ninety_ms_config)

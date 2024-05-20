@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np  # todo: replace with cupy on linux?
 
 
-class PCONode8:
+class RandomizedPCONode9:
     """Adding connectivity estimation and dynamic parameter adjustment to the PCO model."""
 
     def __init__(self, env, init_state, logging):  # , state):
@@ -40,14 +40,20 @@ class PCONode8:
         self.buffer = []
 
         # used by main loop
-        self.timer = 0
-        self.epoch = 0
-        self.highest_msg_this_epoch = (self.id, self.epoch)
+        self.phase = 0
+        self.firing_phase = self.rng.integers(0, 100) * self.OVERALL_MULT
         self.period = self.DEFAULT_PERIOD_LENGTH
-        self.next_period = self.DEFAULT_PERIOD_LENGTH
+        self.fired = 0
 
         # start the main loop
         self._main_loop = self.env.process(self._main())
+
+    def phase_response_function(self, phase_diff):
+        a = 0.5
+        if phase_diff <= self.DEFAULT_PERIOD_LENGTH / 2:
+            return (1 - a) * phase_diff
+        else:
+            return (1 - a) * phase_diff + a * self.DEFAULT_PERIOD_LENGTH
 
     def _main(self):
         """Main loop for the node"""
@@ -58,70 +64,47 @@ class PCONode8:
 
         while True:
 
-            while self.buffer:
+            # On message received
+            # while self.buffer:
+            if self.buffer:
+                new_msg = self.buffer.pop(0)  # get first message to arrive in buffer
+                msg_firing_phase = new_msg  # [0]
+                phase_diff = (self.phase - msg_firing_phase) % self.period
+                phase_diff_adjusted = self.phase_response_function(phase_diff)
+                print('our_phase: ', self.phase, 'received:', new_msg, 'phase_diff:', phase_diff,
+                      'phase_diff_adjusted:', phase_diff_adjusted,
+                      'new_phase:', (phase_diff_adjusted + msg_firing_phase) % self.DEFAULT_PERIOD_LENGTH)
+                self.phase = (phase_diff_adjusted + msg_firing_phase) % self.DEFAULT_PERIOD_LENGTH
+                self.buffer.clear()
+                # if self.firing_phase < self.phase:
+                #     self.fired = 1
 
-                new_msg = self.buffer.pop()
-
-                # If the new msg epoch is greater than the largest epoch message seen this period previously, update
-                #   and sync to it
-                # This will happen when all nodes are synced, since epoch is incremented before sending
-                if new_msg[1] > self.highest_msg_this_epoch[1]:
-                    self.highest_msg_this_epoch = new_msg
-
-                    # synchronize to it
-                    self.next_period = self.DEFAULT_PERIOD_LENGTH - (self.period - self.timer)  # - 1*OVERALL_MULT
-                    # next period should be the time since the todo
-                    self.log('synchronized to node', new_msg[0], 'which has epoch', new_msg[1],
-                             'setting next period to', self.next_period)
-
-                elif new_msg[1] == self.highest_msg_this_epoch[1]:
-                    # new msg has same epoch but message arrived later, ignore.
-                    # self.log('ignoring message from node', new_msg[0], 'with epoch', new_msg[1])
-                    pass
-
-                if new_msg[1] >= self.epoch + 2:
-                    # we're super out of sync, match their epoch number
-                    self.log("super out of sync, matching epoch number")
-                    self.epoch = new_msg[1] - 1
+            # todo: when we adjust our phase, it could be greater than the firing phase, so we shouldn't fire right after
 
             # timer expired
-            if self.timer >= self.period:
+            if self.phase >= self.firing_phase and not self.fired:
+                # print(self.phase, self.firing_phase)
+                self.log('fired: broadcast')
+                self._tx(self.firing_phase)
+                self.fired = 1
+                # self.phase = 0
 
-                # increment epoch now that our timer has expired
-                self.epoch += 1
-
-                # if no message seen this epoch, broadcast
-                if self.highest_msg_this_epoch[0] == self.id:
-
-                    self.log('fired: broadcast')
-                    self._tx((self.id, self.epoch))
-
-                # todo: chance of ignoring suppression, depending on randomness OR connectivity?
-                elif self.rng.random() > self.MS_PROB:
-                    self.log('fired: broadcast (MS override)')
-                    self._tx((self.id, self.epoch))
-
-                else:
-                    # suppress message
-                    self.log_suppress()
-                    self.log('fired: suppressed')
-                    pass
-
-                self.timer = 0
-                self.period = self.next_period
-                self.next_period = self.DEFAULT_PERIOD_LENGTH
-                self.highest_msg_this_epoch = (self.id, self.epoch)
+            if self.phase >= self.period:
+                self.phase = 0
+                self.fired = 0
+                # self.firing_phase = self.rng.integers(1, 100) * self.OVERALL_MULT
 
             self.log_phase()
-            self.log_epoch()
+            # self.log_epoch()
 
             # local timer update (stochastic)
+            # tick_len = self.RECEPTION_LOOP_TICKS
             tick_len = int(
                 self.rng.normal(
                     1 * self.RECEPTION_LOOP_TICKS + self.clock_drift_rate * 3e-6 * self.RECEPTION_LOOP_TICKS,
                     self.clock_drift_scale * self.RECEPTION_LOOP_TICKS))
 
-            self.timer += self.RECEPTION_LOOP_TICKS
+            self.phase += self.RECEPTION_LOOP_TICKS
             self.log_phase_helper()
 
             yield self.env.timeout(tick_len)
@@ -137,7 +120,8 @@ class PCONode8:
             reception_prob = reception_probability(distance, self.DISTANCE_EXPONENT)
             # message reception probability proportional to inverse distance squared
             # if random.random() < self.NEIGHBOR_RECEPTION_PROB:
-            if self.rng.random() < reception_prob:
+            # if self.rng.random() < reception_prob:
+            if True:
                 neighbor.buffer.append(message)
                 self.log_reception(neighbor)
 
@@ -148,14 +132,14 @@ class PCONode8:
 
     def log_phase(self):
         self.logging.node_phase_x[self.id].append(self.env.now)
-        self.logging.node_phase_y[self.id].append(self.timer)
+        self.logging.node_phase_y[self.id].append(self.phase)
         self.logging.node_phase_percentage_x[self.id].append(self.env.now)
-        self.logging.node_phase_percentage_y[self.id].append((self.timer / max(self.period, 1)) * 100)
+        self.logging.node_phase_percentage_y[self.id].append((self.phase / max(self.period, 1)) * 100)
 
     def log_phase_helper(self):
         """needed to instantly set next env tick phase to 0, otherwise waits until next large tick to set to zero,
         messing up the interpolation when graphing"""
-        if self.timer >= self.period:
+        if self.phase >= self.period:
             self.logging.node_phase_x[self.id].append(self.env.now)
             self.logging.node_phase_y[self.id].append(0)
             self.logging.node_phase_percentage_x[self.id].append(self.env.now)
@@ -165,13 +149,13 @@ class PCONode8:
         self.logging.fire_x.append(self.env.now)
         self.logging.fire_y.append(self.id)
 
-    def log_suppress(self):
-        self.logging.suppress_x.append(self.env.now)
-        self.logging.suppress_y.append(self.id)
+    # def log_suppress(self):
+    #     self.logging.suppress_x.append(self.env.now)
+    #     self.logging.suppress_y.append(self.id)
 
-    def log_epoch(self):
-        self.logging.node_epochs_x[self.id].append(self.env.now)
-        self.logging.node_epochs_y[self.id].append(self.epoch)
+    # def log_epoch(self):
+    #     self.logging.node_epochs_x[self.id].append(self.env.now)
+    #     self.logging.node_epochs_y[self.id].append(self.epoch)
 
     def log_reception(self, neighbor):
         self.logging.reception_x.append(self.env.now)
