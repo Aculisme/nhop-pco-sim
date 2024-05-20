@@ -3,7 +3,10 @@ import pandas as pd
 
 file_out = '/Users/lucamehl/Downloads/nhop-pco-sim/temp.txt'
 df = pd.read_csv(file_out)
-time_until_synch = df['time_until_synchronization_human_readable'].values
+
+# 100_ms = df.where(df['time_until_synchronization'] == 100).dropna(
+
+time_until_synch = df['time_until_synchronization_human_readable']#.values
 
 print(time_until_synch)
 time_until_synch_mean = np.mean(time_until_synch)

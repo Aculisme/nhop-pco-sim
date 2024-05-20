@@ -514,7 +514,7 @@ def main_2():
     q = manager.Queue()
     pool = mp.Pool(7)  # mp.cpu_count() + 2
 
-    # put listener to work first
+    # put writer to work first
     watcher = pool.apply_async(listener, (q, default_config))
 
     # fire off workers
@@ -527,7 +527,7 @@ def main_2():
     for job in jobs:
         job.get()
 
-    # now we are done, kill the listener
+    # now we are done, kill the writer
     q.put('kill')
     pool.close()
     pool.join()
