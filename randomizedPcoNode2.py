@@ -4,8 +4,8 @@ from typing import Optional
 import numpy as np  # todo: replace with cupy on linux?
 
 
-class RandomizedPCONode9:
-    """Adding connectivity estimation and dynamic parameter adjustment to the PCO model."""
+class RandomizedPCONode2:
+    """Adding epochs to Randomized Phase algorithm."""
 
     def __init__(self, env, init_state, logging):  # , state):
         """Initialise the node with a given *env*, *initial state*, and *logging* handle."""
@@ -44,6 +44,7 @@ class RandomizedPCONode9:
         self.firing_phase = self.rng.integers(0, 100) * self.OVERALL_MULT
         self.period = self.DEFAULT_PERIOD_LENGTH
         self.fired = 0
+        self.epoch = 0
 
         # start the main loop
         self._main_loop = self.env.process(self._main())
@@ -58,24 +59,28 @@ class RandomizedPCONode9:
     def _main(self):
         """Main loop for the node"""
 
-        # sleep random time before starting
+        # sleep random time before starting and clear buffer of any messages that arrived during sleep
+        # (artefact of simulation setup)
         yield self.env.timeout(self.initial_time_offset * self.OVERALL_MULT)
         self.buffer.clear()
 
         while True:
 
             # On message received
-            # while self.buffer:
             if self.buffer:
                 new_msg = self.buffer.pop(0)  # get first message to arrive in buffer
-                msg_firing_phase = new_msg  # [0]
+                msg_firing_phase, msg_epoch = new_msg  # [0]
                 phase_diff = (self.phase - msg_firing_phase) % self.period
                 phase_diff_adjusted = self.phase_response_function(phase_diff)
-                print('our_phase: ', self.phase, 'received:', new_msg, 'phase_diff:', phase_diff,
-                      'phase_diff_adjusted:', phase_diff_adjusted,
-                      'new_phase:', (phase_diff_adjusted + msg_firing_phase) % self.DEFAULT_PERIOD_LENGTH)
                 self.phase = (phase_diff_adjusted + msg_firing_phase) % self.DEFAULT_PERIOD_LENGTH
                 self.buffer.clear()
+
+                if msg_epoch > self.epoch:
+                    self.epoch = msg_epoch
+                    # self.firing_phase = self.rng.integers(0, 100) * self.OVERALL_MULT
+                    # self.phase = 0
+                    # self.fired = 0
+
                 # if self.firing_phase < self.phase:
                 #     self.fired = 1
 
@@ -85,20 +90,19 @@ class RandomizedPCONode9:
             if self.phase >= self.firing_phase and not self.fired:
                 # print(self.phase, self.firing_phase)
                 self.log('fired: broadcast')
-                self._tx(self.firing_phase)
+                self._tx((self.firing_phase, self.epoch))
                 self.fired = 1
-                # self.phase = 0
 
             if self.phase >= self.period:
                 self.phase = 0
                 self.fired = 0
+                self.epoch += 1
                 # self.firing_phase = self.rng.integers(1, 100) * self.OVERALL_MULT
 
+            self.log_epoch()
             self.log_phase()
-            # self.log_epoch()
 
             # local timer update (stochastic)
-            # tick_len = self.RECEPTION_LOOP_TICKS
             tick_len = int(
                 self.rng.normal(
                     1 * self.RECEPTION_LOOP_TICKS + self.clock_drift_rate * 3e-6 * self.RECEPTION_LOOP_TICKS,
@@ -153,9 +157,9 @@ class RandomizedPCONode9:
     #     self.logging.suppress_x.append(self.env.now)
     #     self.logging.suppress_y.append(self.id)
 
-    # def log_epoch(self):
-    #     self.logging.node_epochs_x[self.id].append(self.env.now)
-    #     self.logging.node_epochs_y[self.id].append(self.epoch)
+    def log_epoch(self):
+        self.logging.node_epochs_x[self.id].append(self.env.now)
+        self.logging.node_epochs_y[self.id].append(self.epoch)
 
     def log_reception(self, neighbor):
         self.logging.reception_x.append(self.env.now)

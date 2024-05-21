@@ -15,7 +15,8 @@ import time
 
 from pcoNode8 import reception_probability, distance_euc, InitState, Logging, PCONode8, Results, \
     RESULTS_CSV_HEADER
-from randomizedPcoNode9 import RandomizedPCONode9
+from randomizedPcoNode1 import RandomizedPCONode1
+from randomizedPcoNode2 import RandomizedPCONode2
 
 
 @dataclass
@@ -38,6 +39,7 @@ class TrialConfig:
     sync_num_ticks: float
     file_out: str
     num_trials: int
+    pco_node: Callable
     topo: Callable  # nx.Graph generator function
     topo_params: Optional[dict] = None  # param name : value, passed to generator
     random_seed: Optional[int] = None
@@ -116,7 +118,7 @@ def run_trial(trial_config):
 
     env = simpy.Environment()
     # Create Nodes
-    nodes = [RandomizedPCONode9(env, init_state, logging) for init_state in init_states]
+    nodes = [trial_config.pco_node(env, init_state, logging) for init_state in init_states]
 
     for i, node in enumerate(nodes):
         node.neighbors = [nodes[n] for n in range(len(nodes)) if n != i]  # [nodes[n] for n in topo[i]]
@@ -298,6 +300,7 @@ default_config = TrialConfig(
     num_trials=100,
     num_nodes=50,
     topo=nx.random_internet_as_graph,
+    pco_node=PCONode8,
 
     # Setting random_seed will fix all trials to use the exact same random seed. If argument not passed, then each trial
     # will use a different time-based random seed.
@@ -312,25 +315,26 @@ randomized_pco_config = TrialConfig(
     reception_loop_ticks=100,
     default_period_length=100 * 1000,
     sim_time=2000 * 1000,
-    ms_prob=1.0,
+    ms_prob=1.0,  # todo: make optional?
     m_to_px=90,
     distance_exponent=15,
     clock_drift_rate_offset_range=100,
     clock_drift_variability=0.05,
     min_initial_time_offset=0,
-    max_initial_time_offset=100,
+    max_initial_time_offset=200,
     sync_epsilon=2,
     sync_num_ticks=1.0,
     # todo: make file path dynamic? or not?
     file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
     num_trials=1,  #
-    num_nodes=21,  #
-    topo=nx.barbell_graph,  # nx.complete_graph,
-
+    num_nodes=11,  #
+    pco_node=RandomizedPCONode2,
+    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
+    # topo=nx.complete_graph,
     # Setting random_seed will fix all trials to use the exact same random seed. If argument not passed, then each trial
     # will use a different time-based random seed.
     # random_seed=0,
-    topo_params={'m1': 10, 'm2': 1} #seed
+    topo_params={'m1': 5, 'm2': 1}  # seed
 )
 
 
