@@ -13,14 +13,15 @@ from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
 import time
 
-from pcoNode8 import reception_probability, distance_euc, InitState, Logging, PCONode8, Results, \
-    RESULTS_CSV_HEADER
-from randomizedPcoNode1 import RandomizedPCONode1
+import pcoNode8
+from pcoNode8 import PCONode8
+from pcoNode9 import PCONode9
 from randomizedPcoNode2 import RandomizedPCONode2
 
 
 @dataclass
 class TrialConfig:
+    # todo: set defaults?
     testing: bool
     logging_on: bool
     overall_mult: int
@@ -41,14 +42,119 @@ class TrialConfig:
     num_trials: int
     pco_node: Callable
     topo: Callable  # nx.Graph generator function
-    topo_params: Optional[dict] = None  # param name : value, passed to generator
+    topo_params: Optional[dict] = None  # param : value, passed to generator
+    # Setting random_seed will fix all trials to use the exact same random seed. If argument not passed, then each trial
+    # will use a different time-based random seed.
     random_seed: Optional[int] = None
 
     def __post_init__(self):
         if self.topo_params is None:
             self.topo_params = {'n': self.num_nodes}
-        if self.random_seed is not None:
-            self.topo_params['seed'] = self.random_seed
+        # if self.random_seed is not None:
+        #     self.topo_params['seed'] = self.random_seed
+
+
+def edgelist_to_neighbors(edge_list):
+    neighbors = {}
+    for edge in edge_list:
+        if edge[0] not in neighbors:
+            neighbors[edge[0]] = []
+        if edge[1] not in neighbors:
+            neighbors[edge[1]] = []
+        neighbors[edge[0]].append(edge[1])
+        neighbors[edge[1]].append(edge[0])
+    return neighbors
+
+
+def calculate_phase_difference(wave1, wave2, max_phase_percentage=100):
+    diff = np.abs(wave1 - wave2)
+    diff_opposite = abs(max_phase_percentage - diff)
+    return np.minimum(diff, diff_opposite)
+
+
+@dataclass
+class Logging:
+    node_phase_x: list
+    node_phase_y: list
+    node_phase_percentage_x: list
+    node_phase_percentage_y: list
+    node_epochs_x: list
+    node_epochs_y: list
+    fire_x: list
+    fire_y: list
+    suppress_y: list
+    suppress_x: list
+    reception_x: list
+    reception_y: list
+
+
+@dataclass
+class InitState:
+    id: int
+    # initial_time_offset: int
+    # clock_drift_rate: int
+    clock_drift_scale: float
+    min_initial_time_offset: int
+    max_initial_time_offset: int
+    clock_drift_rate_offset_range: int
+    overall_mult: int
+    RECEPTION_LOOP_TICKS: int
+    DEFAULT_PERIOD_LENGTH: int
+    M_TO_PX: int
+    DISTANCE_EXPONENT: int
+    MS_PROB: float
+    pos: tuple
+    LOGGING_ON: bool
+    rng_seed: int
+    neighbors: list
+
+
+RESULTS_CSV_HEADER = ','.join([
+    'num_nodes',
+    'num_broadcasts',
+    'avg_mean_phase_diff_after_synchronization',
+    'avg_max_phase_diff_after_synchronization',
+    'time_until_synchronization_human_readable',
+    'rng_seed',
+    'ms_prob'
+])
+
+
+@dataclass
+class Results:
+    num_nodes: int
+    # todo: density: float
+    num_broadcasts: int
+    avg_mean_phase_diff_after_synchronization: float
+    avg_max_phase_diff_after_synchronization: float
+    time_until_synchronization_human_readable: float
+    rng_seed: int
+    ms_prob: float
+
+    # time_until_synchronization: float
+    # metrics: list
+
+    def to_iterable(self):
+        return [
+            self.num_nodes,
+            self.num_broadcasts,
+            self.avg_mean_phase_diff_after_synchronization,
+            self.avg_max_phase_diff_after_synchronization,
+            self.time_until_synchronization_human_readable,
+            self.rng_seed,
+            self.ms_prob
+        ]
+
+    def to_csv(self):
+        return ','.join([str(x) for x in self.to_iterable()])
+
+
+def distance_euc(a, b):
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+
+
+def reception_probability(distance, distance_exponent):
+    return 1 / (1 + distance ** distance_exponent)
 
 
 def run_trial(trial_config):
@@ -64,20 +170,22 @@ def run_trial(trial_config):
     if trial_config.random_seed is not None:
         rng_seed = trial_config.random_seed
 
-    reception_probabilities = {i: {} for i in range(trial_config.num_nodes)}
-    for x, i in enumerate(pos):
-        for y, j in enumerate(pos):
-            if i != j:
-                reception_prob = reception_probability(distance_euc(pos[i], pos[j]) / trial_config.m_to_px,
-                                                       trial_config.distance_exponent)
-                reception_probabilities[x][y] = round(reception_prob, 3)
-
-    if not trial_config.testing:
-        print('reception_probabilities:')
-        pp(reception_probabilities)
+    # reception_probabilities = {i: {} for i in range(trial_config.num_nodes)}
+    # for x, i in enumerate(pos):
+    #     for y, j in enumerate(pos):
+    #         if i != j:
+    #             reception_prob = reception_probability(distance_euc(pos[i], pos[j]) / trial_config.m_to_px,
+    #                                                    trial_config.distance_exponent)
+    #             reception_probabilities[x][y] = round(reception_prob, 3)
+    #
+    # if not trial_config.testing:
+    #     print('reception_probabilities:')
+    #     pp(reception_probabilities)
 
     if not trial_config.testing:
         nx.draw(G, with_labels=True, pos=pos)
+
+    neighbors_dict = edgelist_to_neighbors(G.edges)
 
     # initial node states
     init_states = [
@@ -87,7 +195,7 @@ def run_trial(trial_config):
             min_initial_time_offset=trial_config.min_initial_time_offset,
             max_initial_time_offset=trial_config.max_initial_time_offset,
             clock_drift_rate_offset_range=trial_config.clock_drift_rate_offset_range,
-            OVERALL_MULT=trial_config.overall_mult,
+            overall_mult=trial_config.overall_mult,
             RECEPTION_LOOP_TICKS=trial_config.reception_loop_ticks,
             DEFAULT_PERIOD_LENGTH=trial_config.default_period_length,
             M_TO_PX=trial_config.m_to_px,
@@ -96,6 +204,7 @@ def run_trial(trial_config):
             pos=pos[i],
             rng_seed=rng_seed + i,
             LOGGING_ON=trial_config.logging_on,
+            neighbors=neighbors_dict[i],
         )
         for i in range(trial_config.num_nodes)
     ]
@@ -121,17 +230,13 @@ def run_trial(trial_config):
     nodes = [trial_config.pco_node(env, init_state, logging) for init_state in init_states]
 
     for i, node in enumerate(nodes):
-        node.neighbors = [nodes[n] for n in range(len(nodes)) if n != i]  # [nodes[n] for n in topo[i]]
-        node.pos = pos[i]
+        node.all_nodes = nodes  # [nodes[n] for n in topo[i]]
+        # node.all_nodes = [nodes[n] for n in range(len(nodes)) if n != i]  # [nodes[n] for n in topo[i]]
+        # node.pos = pos[i]
 
     env.run(until=trial_config.sim_time)
 
     num_broadcasts = len(logging.fire_x)
-
-    def calculate_phase_difference(wave1, wave2, max_phase_percentage=100):
-        diff = np.abs(wave1 - wave2)
-        diff_opposite = abs(max_phase_percentage - diff)
-        return np.minimum(diff, diff_opposite)
 
     x = np.linspace(0, trial_config.sim_time, int(trial_config.sim_time / trial_config.reception_loop_ticks))
 
@@ -167,11 +272,7 @@ def run_trial(trial_config):
     time_until_synchronization_human_readable = np.round(time_until_synchronization / 1000, 2)
 
     # Print out metrics for the network
-    # print('Number of broadcasts:', num_broadcasts)
-    # print("Synchronized avg. phase diff: ", avg_mean_phase_diff_after_synchronization)
-    # print("Time until synchronization: ", time_until_synchronization_human_readable)
     b = time.time()
-    # print('Processing took', round(b - a, 3), 'seconds')
     print('processing time', round(b - a, 3), 's', '|',
           'TTS:', time_until_synchronization_human_readable, 's', '|',
           '#Broadcasts:', num_broadcasts, '|',
@@ -211,7 +312,7 @@ def run_trial(trial_config):
         ax[2].legend(loc="upper right")
 
         fig.suptitle(
-            'Randomized PCO (Schmidt et al.) Node Simulation for a ' + topo.__name__ + ' topology with ' + str(
+            trial_config.pco_node.name + ' Node Simulation for a ' + topo.__name__ + ' topology with ' + str(
                 trial_config.num_nodes) + ' nodes')
 
         # Phase difference
@@ -279,71 +380,6 @@ def writer(q, config):
             f.flush()
 
 
-default_config = TrialConfig(
-    testing=True,
-    logging_on=False,
-    overall_mult=1000,
-    reception_loop_ticks=100,
-    default_period_length=100 * 1000,
-    sim_time=2000 * 1000,
-    ms_prob=1.0,
-    m_to_px=90,
-    distance_exponent=15,
-    clock_drift_rate_offset_range=100,
-    clock_drift_variability=0.05,
-    min_initial_time_offset=0,
-    max_initial_time_offset=100,
-    sync_epsilon=2,
-    sync_num_ticks=1.0,
-    # todo: make file path dynamic? or not?
-    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/temp.txt',
-    num_trials=100,
-    num_nodes=50,
-    topo=nx.random_internet_as_graph,
-    pco_node=PCONode8,
-
-    # Setting random_seed will fix all trials to use the exact same random seed. If argument not passed, then each trial
-    # will use a different time-based random seed.
-    # random_seed=0,
-    # topo_params={'n': 10, 'seed': 0}
-)
-
-randomized_pco_config = TrialConfig(
-    testing=False,  #
-    logging_on=False,
-    overall_mult=1000,
-    reception_loop_ticks=100,
-    default_period_length=100*100,#100 * 1000,
-    sim_time=2000 * 1000,
-    ms_prob=1.0,  # todo: make optional?
-    m_to_px=90,
-    distance_exponent=15,
-    clock_drift_rate_offset_range=100,
-    clock_drift_variability=0.05,
-    min_initial_time_offset=0,
-    max_initial_time_offset=200,
-    sync_epsilon=2,
-    sync_num_ticks=1.0,
-    # todo: make file path dynamic? or not?
-    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
-    num_trials=1,  #
-    num_nodes=11,  #
-    pco_node=RandomizedPCONode2,
-    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
-    # topo=nx.complete_graph,
-    # Setting random_seed will fix all trials to use the exact same random seed. If argument not passed, then each trial
-    # will use a different time-based random seed.
-    # random_seed=0,
-    topo_params={'m1': 5, 'm2': 1}  # seed
-)
-
-
-# thirty_node_config = replace(default_config, num_nodes=30)
-
-# ninety_ms_config = replace(default_config, ms_prob=0.9)
-# eighty_ms_config = replace(default_config, ms_prob=0.8)
-
-
 def main(config):
     # todo: replace with newer executor interface?
     manager = mp.Manager()
@@ -369,11 +405,90 @@ def main(config):
     pool.join()
 
 
+default_config = TrialConfig(
+    testing=False,  #
+    logging_on=False,
+    overall_mult=1000,
+    reception_loop_ticks=100,
+    default_period_length=100 * 1000,  # 100 * 1000,
+    sim_time=2000 * 1000,
+    ms_prob=0.0,  # todo: make optional?
+    m_to_px=90,
+    distance_exponent=15,
+    clock_drift_rate_offset_range=100,
+    clock_drift_variability=0.05,
+    min_initial_time_offset=0,
+    max_initial_time_offset=200,
+    sync_epsilon=2,
+    sync_num_ticks=1.0,
+    # todo: make file path dynamic? or not?
+    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
+    num_trials=1,  #
+    num_nodes=11,  #
+    pco_node=PCONode8,
+    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
+    # topo=nx.complete_graph,
+    random_seed=1,
+    topo_params={'m1': 5, 'm2': 1}  # seed
+)
+
+randomized_pco_config = TrialConfig(
+    testing=False,  #
+    logging_on=False,
+    overall_mult=1000,
+    reception_loop_ticks=100,
+    default_period_length=100 * 1000,  # 100 * 1000,
+    sim_time=2000 * 1000,
+    ms_prob=1.0,  # todo: make optional?
+    m_to_px=90,
+    distance_exponent=15,
+    clock_drift_rate_offset_range=100,
+    clock_drift_variability=0.05,
+    min_initial_time_offset=0,
+    max_initial_time_offset=200,
+    sync_epsilon=2,
+    sync_num_ticks=1.0,
+    # todo: make file path dynamic? or not?
+    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
+    num_trials=1,  #
+    num_nodes=11,  #
+    pco_node=RandomizedPCONode2,
+    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
+    # topo=nx.complete_graph,
+    random_seed=1,
+    topo_params={'m1': 5, 'm2': 1}  # seed
+)
+
+pco9_config = TrialConfig(
+    testing=False,  #
+    logging_on=False,
+    overall_mult=1000,
+    reception_loop_ticks=100,
+    default_period_length=100 * 1000,  # 100 * 1000,
+    sim_time=2000 * 1000,
+    ms_prob=1.0,  # todo: make optional?
+    m_to_px=90,
+    distance_exponent=15,
+    clock_drift_rate_offset_range=100,
+    clock_drift_variability=0.05,
+    min_initial_time_offset=0,
+    max_initial_time_offset=200,
+    sync_epsilon=2,
+    sync_num_ticks=1.0,
+    # todo: make file path dynamic? or not?
+    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
+    num_trials=1,  #
+    num_nodes=11,  #
+    pco_node=PCONode9,
+    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
+    # topo=nx.complete_graph,
+    random_seed=1,
+    topo_params={'m1': 5, 'm2': 1}  # seed
+)
+
 if __name__ == '__main__':
     # todo: make separate file for each or not? give them a name property?
-    print("testing randomized pco config")
-    main(randomized_pco_config)
-    # print("testing 90% ms prob config")
-    # main(ninety_ms_config)
-    # print("testing 80% ms prob config")
-    # main(eighty_ms_config)
+    # main(default_config)
+    main(pco9_config)
+    main(replace(pco9_config, pco_node=PCONode8))
+    # main(randomized_pco_config)
