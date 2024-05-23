@@ -4,10 +4,10 @@ from typing import Optional
 import numpy as np  # todo: replace with cupy on linux?
 
 
-class PCONode91:
-    """Setting the next period's starting phase, instead of the period length itself."""
+class PCONode11:
+    """Adding message suppression to Random Phase FiGo Epochs algorithm."""
 
-    name = "FiGo Epochs Algorithm Version 9"
+    name = "FiGo Epochs Algorithm Version 11"
 
     def __init__(self, env, init_state, logging):  # , state):
         """Initialise the node with a given *env*, *initial state*, and *logging* handle."""
@@ -43,13 +43,17 @@ class PCONode91:
         self.buffer = []
 
         # used by main loop
-        self.timer = 0
+        self.phase = 0
         self.epoch = 0
-        self.highest_msg_this_epoch = (self.id, self.epoch)
         self.period = self.DEFAULT_PERIOD_LENGTH
-        # self.next_period = self.DEFAULT_PERIOD_LENGTH
-        self.fired = False
         self.next_starting_phase = 0
+        self.firing_phase = self.rng.integers(0, self.DEFAULT_PERIOD_LENGTH)
+        self.fired = 0
+        self.firing_interval_long = 8 * self.DEFAULT_PERIOD_LENGTH
+        self.firing_interval_short = self.DEFAULT_PERIOD_LENGTH
+        self.firing_interval = self.firing_interval_short
+        # self.c = 0  # counter for number of 'identical' messages received
+        # self.k = 3  # todo: this is arb. currently #len(self.neighbors)  # threshold for message suppression
 
         # start the main loop
         self._main_loop = self.env.process(self._main())
@@ -66,73 +70,65 @@ class PCONode91:
             while self.buffer:
 
                 new_msg = self.buffer.pop()
+                msg_id, msg_epoch, msg_phase = new_msg
 
-                # If the new msg epoch is greater than the largest epoch message seen this period previously, update
-                #   and sync to it
-                # This will happen when all nodes are synced, since epoch is incremented before sending
-                if new_msg[1] > self.highest_msg_this_epoch[1]:
-                    self.highest_msg_this_epoch = new_msg
+                phase_diff = (self.phase - msg_phase)
 
-                    # synchronize to it
-                    phase_diff = self.period - self.timer
-                    if phase_diff <= self.period / 2:
-                        self.next_starting_phase = phase_diff
+                current_epoch_phase_float = self.epoch + self.phase / self.period
+                msg_epoch_phase_float = msg_epoch + msg_phase / self.period
+                delta = current_epoch_phase_float - msg_epoch_phase_float
+
+                # we're more than a period behind. We need to change both our epoch and phase
+                if delta < -1:  # todo: check < vs <=
+                    # our phase is ahead of the message, so if we set our epoch to match theirs, they will then
+                    # have to sync back to us (since we can't lengthen our next period...)
+                    # instead, we should set our epoch to one less than theirs, and set our starting phase for the
+                    # next period to the absolute value of the phase difference.
+                    if phase_diff >= 0:  # todo: check > vs >=
+                        self.epoch = msg_epoch - 1
+
+                    # simple case. We can just set our epoch to match theirs
                     else:
-                        self.next_starting_phase = (phase_diff + self.period) % self.period
+                        self.epoch = msg_epoch
 
-                    self.log_synch_to_node(new_msg)
+                    self.next_starting_phase = (self.period - phase_diff) % self.period  # abs(phase_diff) # todo: fix
+                    self.log_fire_update()
 
-                elif new_msg[1] == self.highest_msg_this_epoch[1]:
-                    # new msg has same epoch but message arrived later, ignore.
-                    # self.log('ignoring message from node', new_msg[0], 'with epoch', new_msg[1])
+                # we're behind, but within a period. We need to change our phase to match theirs.
+                elif -1 <= delta < 0:
+                    self.next_starting_phase = max((self.period - phase_diff) % self.period, self.next_starting_phase)
+
+                # we're ahead by within a period. They should synch to us.
+                # Do nothing.
+                elif 0 <= delta < 1:
                     pass
 
-                if new_msg[1] >= self.epoch + 2:
-                    # we're super out of sync, match their epoch number
-                    # self.log("super out of sync, matching epoch number")
-                    self.epoch = new_msg[1] - 1
+                # the message received was more than an epoch behind, so they're out of synch.
+                # We should broadcast immediately to get them up to speed.
+                elif delta >= 1:  # todo: check < vs <=
 
-            # timer expired
-            if self.timer >= self.firing_phase and not self.fired:
-                # print(self.timer, self.firing_phase)
-                self.log('fired: broadcast')
-                self._tx((self.firing_phase, self.epoch))
+                    self.log_out_of_sync_broadcast()
+                    self._tx((self.id, self.epoch, self.phase))
+
+            # Firing phase reached, broadcast message
+            if self.phase >= self.firing_phase and not self.fired:
                 self.fired = 1
+                # todo: if self.c < self.k: # message supression
+                self.log_fire()
+                self._tx((self.id, self.epoch, self.phase))
 
-            if self.timer >= self.period:
-                self.timer = 0
-                self.fired = 0
-                self.epoch += 1
+                self.firing_phase = self.rng.integers(self.phase, self.period + self.phase) % self.period
+                # todo: use firing_interval instead, so that it can fire less than once a period
 
             # timer expired
-            if self.timer >= self.period:
-
+            if self.phase >= self.period:
                 # increment epoch now that our timer has expired
                 self.epoch += 1
-
-                # # if no message seen this epoch, broadcast
-                # if self.highest_msg_this_epoch[0] == self.id:
-                #
-                #     # self.log('fired: broadcast')
-                #     self._tx((self.id, self.epoch))
-                #
-                # # todo: chance of ignoring suppression, depending on randomness OR connectivity?
-                # elif self.rng.random() > self.MS_PROB:
-                #     # self.log('fired: broadcast (MS override)')
-                #     self._tx((self.id, self.epoch))
-                #
-                # else:
-                #     # suppress message
-                #     self.log_suppress()
-                #     # self.log('fired: suppressed')
-                #     pass
-
-                # self.timer = 0
-                self.timer = self.next_starting_phase
-                # self.period = self.DEFAULT_PERIOD_LENGTH
+                self.phase = self.next_starting_phase
                 self.next_starting_phase = 0
-                # self.next_period = self.DEFAULT_PERIOD_LENGTH
-                self.highest_msg_this_epoch = (self.id, self.epoch)
+                self.fired = 0
+
+                # self.firing_interval = min(2 * self.firing_interval, self.firing_interval_long)
 
             self.log_phase()
             self.log_epoch()
@@ -143,14 +139,13 @@ class PCONode91:
                     1 * self.RECEPTION_LOOP_TICKS + self.clock_drift_rate * 3e-6 * self.RECEPTION_LOOP_TICKS,
                     self.clock_drift_scale * self.RECEPTION_LOOP_TICKS))
 
-            self.timer += self.RECEPTION_LOOP_TICKS
+            self.phase += self.RECEPTION_LOOP_TICKS
             self.log_phase_helper()
 
             yield self.env.timeout(tick_len)
 
     def _tx(self, message):
         """Broadcast a *message* to all receivers."""
-        self.log_fire()
         if not self.neighbors:
             raise RuntimeError('There are no neighbors to send to.')
 
@@ -167,22 +162,23 @@ class PCONode91:
     def log(self, *message):
         """Log a message with the current time and node id."""
         if self.LOGGING_ON:
-            print('node', self.id, '|', 'time', self.env.now / self.overall_mult, '| epoch', self.epoch, '|', *message)
+            print('node', self.id, '|', 'time', self.env.now / self.overall_mult, '| phase', self.phase, '| epoch',
+                  self.epoch, '|', *message)
 
     def log_phase(self):
         self.logging.node_phase_x[self.id].append(self.env.now)
-        self.logging.node_phase_y[self.id].append(self.timer)
+        self.logging.node_phase_y[self.id].append(self.phase)
         self.logging.node_phase_percentage_x[self.id].append(self.env.now)
-        self.logging.node_phase_percentage_y[self.id].append((self.timer / max(self.period, 1)) * 100)
+        self.logging.node_phase_percentage_y[self.id].append((self.phase / max(self.period, 1)) * 100)
 
     def log_phase_helper(self):
         """needed to instantly set next env tick phase to 0, otherwise waits until next large tick to set to zero,
         messing up the interpolation when graphing"""
-        if self.timer >= self.period:
+        if self.phase >= self.period:
             self.logging.node_phase_x[self.id].append(self.env.now)
-            self.logging.node_phase_y[self.id].append(0)
+            self.logging.node_phase_y[self.id].append(self.next_starting_phase)
             self.logging.node_phase_percentage_x[self.id].append(self.env.now)
-            self.logging.node_phase_percentage_y[self.id].append(0)
+            self.logging.node_phase_percentage_y[self.id].append(self.next_starting_phase / max(self.period, 1) * 100)
 
     def log_fire(self):
         self.logging.fire_x.append(self.env.now)
@@ -200,10 +196,15 @@ class PCONode91:
         self.logging.reception_x.append(self.env.now)
         self.logging.reception_y.append(self.all_nodes[neighbor].id)
 
+    def log_fire_update(self):
+        self.logging.fire_update_x.append(self.env.now)
+        self.logging.fire_update_y.append(self.id)
+
     def log_synch_to_node(self, new_msg):
-        self.log('synchronized to node', new_msg[0], 'which has epoch', new_msg[1],
+        self.log('synchronized to node', new_msg[0], 'which has epoch', new_msg[1], 'and phase', new_msg[2],
                  'setting next starting phase to', self.next_starting_phase)
         # todo: add logging support for synchronizations.
 
-
-
+    def log_out_of_sync_broadcast(self):
+        self.logging.out_of_sync_broadcast_x.append(self.env.now)
+        self.logging.out_of_sync_broadcast_y.append(self.id)

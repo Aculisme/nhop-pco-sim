@@ -104,6 +104,7 @@ class PCONode10:
                     self._tx((self.id, self.epoch, self.phase))
                     self.log_out_of_sync_broadcast()
 
+            # Firing phase reached, broadcast message
             if self.phase >= self.firing_phase and not self.fired:
                 self.log('fired: broadcast')
                 self._tx((self.id, self.epoch, self.phase))
