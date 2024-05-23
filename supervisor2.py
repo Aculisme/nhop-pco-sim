@@ -13,9 +13,10 @@ from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
 import time
 
-import pcoNode8
+from pcoNode10 import PCONode10
 from pcoNode8 import PCONode8
 from pcoNode9 import PCONode9
+from pcoNode91 import PCONode91
 from randomizedPcoNode2 import RandomizedPCONode2
 
 
@@ -86,6 +87,10 @@ class Logging:
     suppress_x: list
     reception_x: list
     reception_y: list
+    fire_update_x: list
+    fire_update_y: list
+    out_of_sync_broadcast_x: list
+    out_of_sync_broadcast_y: list
 
 
 @dataclass
@@ -223,6 +228,10 @@ def run_trial(trial_config):
         suppress_x=[],
         reception_x=[],
         reception_y=[],
+        fire_update_x=[],
+        fire_update_y=[],
+        out_of_sync_broadcast_x=[],
+        out_of_sync_broadcast_y=[],
     )
 
     env = simpy.Environment()
@@ -296,6 +305,11 @@ def run_trial(trial_config):
                    alpha=0.3)
         ax[1].plot(logging.suppress_x, logging.suppress_y, 'x', color='grey', label='node suppress', markersize=5)
         ax[1].plot(logging.fire_x, logging.fire_y, 'o', color='red', label='node fire', markersize=5)
+        ax[1].plot(logging.fire_update_x, logging.fire_update_y, 'o', color='green', label='node update fire',
+                   markersize=5)
+        ax[1].plot(logging.out_of_sync_broadcast_x, logging.out_of_sync_broadcast_y, 'o', color='purple',
+                   label='node out of sync broadcast',
+                   markersize=5)
 
         ax[1].set_xticks(np.arange(0, trial_config.sim_time + 1, trial_config.default_period_length))
         ax[1].grid()
@@ -334,6 +348,7 @@ def run_trial(trial_config):
             "Message Suppression prob.: " + str(trial_config.ms_prob * 100) + '%',
             "Non-adj. node comm. prob. params.: C=" + str(trial_config.m_to_px) + ' E=' + str(
                 trial_config.distance_exponent),
+            "Random seed: " + str(rng_seed),
         ]
 
         for i, metric_text in enumerate(metrics):
@@ -459,14 +474,14 @@ randomized_pco_config = TrialConfig(
     topo_params={'m1': 5, 'm2': 1}  # seed
 )
 
-pco9_config = TrialConfig(
+pco91_config = TrialConfig(
     testing=False,  #
-    logging_on=False,
+    logging_on=True,
     overall_mult=1000,
     reception_loop_ticks=100,
     default_period_length=100 * 1000,  # 100 * 1000,
     sim_time=2000 * 1000,
-    ms_prob=1.0,  # todo: make optional?
+    ms_prob=0,  # 1.0,  # todo: make optional?
     m_to_px=90,
     distance_exponent=15,
     clock_drift_rate_offset_range=100,
@@ -479,16 +494,45 @@ pco9_config = TrialConfig(
     file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
     num_trials=1,  #
     num_nodes=11,  #
-    pco_node=PCONode9,
+    pco_node=PCONode91,
     topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
     # topo=nx.complete_graph,
-    random_seed=1,
+    random_seed=1716397169129424000,
+    # random_seed=1,
+    topo_params={'m1': 5, 'm2': 1}  # seed
+)
+pco10_config = TrialConfig(
+    testing=False,  #
+    logging_on=True,
+    overall_mult=1000,
+    reception_loop_ticks=100,
+    default_period_length=100 * 1000,  # 100 * 1000,
+    sim_time=2000 * 1000,
+    ms_prob=0,  # 1.0,  # todo: make optional?
+    m_to_px=90,
+    distance_exponent=15,
+    clock_drift_rate_offset_range=100,
+    clock_drift_variability=0.05,
+    min_initial_time_offset=0,
+    max_initial_time_offset=200,
+    sync_epsilon=2,
+    sync_num_ticks=1.0,
+    # todo: make file path dynamic? or not?
+    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
+    num_trials=1,  #
+    num_nodes=11,  #
+    pco_node=PCONode10,
+    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
+    # topo=nx.complete_graph,
+    random_seed=1716397169129424000,
+    # random_seed=1,
     topo_params={'m1': 5, 'm2': 1}  # seed
 )
 
 if __name__ == '__main__':
     # todo: make separate file for each or not? give them a name property?
     # main(default_config)
-    main(pco9_config)
-    main(replace(pco9_config, pco_node=PCONode8))
+    main(pco10_config)
+    # main(replace(pco10_config, pco_node=PCONode8))
+    # main(replace(pco10_config, pco_node=RandomizedPCONode2))
     # main(randomized_pco_config)

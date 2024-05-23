@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np  # todo: replace with cupy on linux?
 
 
-class PCONode9:
+class PCONode91:
     """Setting the next period's starting phase, instead of the period length itself."""
 
     name = "FiGo Epochs Algorithm Version 9"
@@ -48,6 +48,7 @@ class PCONode9:
         self.highest_msg_this_epoch = (self.id, self.epoch)
         self.period = self.DEFAULT_PERIOD_LENGTH
         # self.next_period = self.DEFAULT_PERIOD_LENGTH
+        self.fired = False
         self.next_starting_phase = 0
 
         # start the main loop
@@ -92,27 +93,39 @@ class PCONode9:
                     self.epoch = new_msg[1] - 1
 
             # timer expired
+            if self.timer >= self.firing_phase and not self.fired:
+                # print(self.timer, self.firing_phase)
+                self.log('fired: broadcast')
+                self._tx((self.firing_phase, self.epoch))
+                self.fired = 1
+
+            if self.timer >= self.period:
+                self.timer = 0
+                self.fired = 0
+                self.epoch += 1
+
+            # timer expired
             if self.timer >= self.period:
 
                 # increment epoch now that our timer has expired
                 self.epoch += 1
 
-                # if no message seen this epoch, broadcast
-                if self.highest_msg_this_epoch[0] == self.id:
-
-                    # self.log('fired: broadcast')
-                    self._tx((self.id, self.epoch))
-
-                # todo: chance of ignoring suppression, depending on randomness OR connectivity?
-                elif self.rng.random() > self.MS_PROB:
-                    # self.log('fired: broadcast (MS override)')
-                    self._tx((self.id, self.epoch))
-
-                else:
-                    # suppress message
-                    self.log_suppress()
-                    # self.log('fired: suppressed')
-                    pass
+                # # if no message seen this epoch, broadcast
+                # if self.highest_msg_this_epoch[0] == self.id:
+                #
+                #     # self.log('fired: broadcast')
+                #     self._tx((self.id, self.epoch))
+                #
+                # # todo: chance of ignoring suppression, depending on randomness OR connectivity?
+                # elif self.rng.random() > self.MS_PROB:
+                #     # self.log('fired: broadcast (MS override)')
+                #     self._tx((self.id, self.epoch))
+                #
+                # else:
+                #     # suppress message
+                #     self.log_suppress()
+                #     # self.log('fired: suppressed')
+                #     pass
 
                 # self.timer = 0
                 self.timer = self.next_starting_phase
