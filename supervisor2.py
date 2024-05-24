@@ -42,10 +42,11 @@ class TrialConfig:
     min_initial_time_offset: int
     max_initial_time_offset: int
     num_nodes: int
-    sync_epsilon: int
-    sync_num_ticks: float
+    sync_epsilon: float  # threshold for synchronization (max pair-wise phase difference % of period length)
+    sync_num_ticks: int  # number of ticks to be synchronized ?
     file_out: str
     num_trials: int
+    phase_diff_percentage_threshold: float
     pco_node: Callable
     topo: Callable  # nx.Graph generator function
     topo_params: Optional[dict] = None  # param : value, passed to generator
@@ -117,6 +118,7 @@ class InitState:
     LOGGING_ON: bool
     rng_seed: int
     neighbors: list
+    phase_diff_percentage_threshold: float
 
 
 RESULTS_CSV_HEADER = ','.join([
@@ -215,6 +217,7 @@ def run_trial(trial_config):
             rng_seed=rng_seed + i,
             LOGGING_ON=trial_config.logging_on,
             neighbors=neighbors_dict[i],
+            phase_diff_percentage_threshold=trial_config.phase_diff_percentage_threshold,
         )
         for i in range(trial_config.num_nodes)
     ]
@@ -274,7 +277,7 @@ def run_trial(trial_config):
 
     # Find time until synchronization
     """We consider the network synchronized when the maximum pair-wise phase difference between all nodes at a given tick 
-    is less than 2% of the period length, and remains so for 95% of the subsequent 100 ticks"""
+    is less than 2% of the period length, and remains so for 100% of the subsequent 100 ticks"""
     v = sliding_window_view(max_differences, 1000)
     for i, window in enumerate(v):
         if (window < trial_config.sync_epsilon).sum() >= trial_config.sync_num_ticks * len(window):
@@ -298,7 +301,8 @@ def run_trial(trial_config):
 
         # Node phase
         for i in range(trial_config.num_nodes):
-            ax[0].plot(logging.node_phase_x[i], logging.node_phase_y[i], label='node ' + str(i), linewidth=(3 if i==4 or i==5 or i==6 else 2),
+            ax[0].plot(logging.node_phase_x[i], logging.node_phase_y[i], label='node ' + str(i),
+                       linewidth=(3 if i == 4 or i == 5 or i == 6 else 2),
                        linestyle='dashdot')
         ax[0].set_title('Node phase')
         ax[0].set(
@@ -354,12 +358,12 @@ def run_trial(trial_config):
             "Non-adj. node comm. prob. params.: C=" + str(trial_config.m_to_px) + ' E=' + str(
                 trial_config.distance_exponent),
             "Random seed: " + str(rng_seed),
+            "Phase difference threshold for cancelling exp. backoff: " + str(
+                trial_config.phase_diff_percentage_threshold * 100) + "%",
         ]
 
         for i, metric_text in enumerate(metrics):
             plt.text(.50, .96 - .1 * i, metric_text, ha='left', va='top', transform=ax[3].transAxes)
-
-
 
     # todo: calculate properties about the graph, like connectivity, average degree, etc.
     # todo: store adjacency matrix, etc. for later analysis in different file?
@@ -427,220 +431,34 @@ def main(config):
     pool.join()
 
 
-default_config = TrialConfig(
-    testing=False,  #
-    logging_on=False,
-    overall_mult=1000,
-    reception_loop_ticks=100,
-    default_period_length=100 * 1000,  # 100 * 1000,
-    sim_time=2000 * 1000,
-    ms_prob=0.0,  # todo: make optional?
-    m_to_px=90,
-    distance_exponent=15,
-    clock_drift_rate_offset_range=100,
-    clock_drift_variability=0.05,
-    min_initial_time_offset=0,
-    max_initial_time_offset=200,
-    sync_epsilon=2,
-    sync_num_ticks=1.0,
-    # todo: make file path dynamic? or not?
-    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
-    num_trials=1,  #
-    num_nodes=11,  #
-    pco_node=PCONode8,
-    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
-    # topo=nx.complete_graph,
-    random_seed=1,
-    topo_params={'m1': 5, 'm2': 1}  # seed
-)
-
-randomized_pco_config = TrialConfig(
-    testing=False,  #
-    logging_on=False,
-    overall_mult=1000,
-    reception_loop_ticks=100,
-    default_period_length=100 * 1000,  # 100 * 1000,
-    sim_time=2000 * 1000,
-    ms_prob=1.0,  # todo: make optional?
-    m_to_px=90,
-    distance_exponent=15,
-    clock_drift_rate_offset_range=100,
-    clock_drift_variability=0.05,
-    min_initial_time_offset=0,
-    max_initial_time_offset=200,
-    sync_epsilon=2,
-    sync_num_ticks=1.0,
-    # todo: make file path dynamic? or not?
-    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
-    num_trials=1,  #
-    num_nodes=11,  #
-    pco_node=RandomizedPCONode2,
-    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
-    # topo=nx.complete_graph,
-    random_seed=1,
-    topo_params={'m1': 5, 'm2': 1}  # seed
-)
-
-pco10_config = TrialConfig(
-    testing=False,  #
+randomizedPcoNode4_config = TrialConfig(
+    testing=False,
     logging_on=True,
     overall_mult=1000,
     reception_loop_ticks=100,
-    default_period_length=100 * 1000,  # 100 * 1000,
-    sim_time=2000 * 1000,
-    ms_prob=0,  # 1.0,  # todo: make optional?
-    m_to_px=90,
-    distance_exponent=15,
-    clock_drift_rate_offset_range=100,
-    clock_drift_variability=0.05,
-    min_initial_time_offset=0,
-    max_initial_time_offset=200,
-    sync_epsilon=2,
-    sync_num_ticks=1.0,
-    # todo: make file path dynamic? or not?
-    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
-    num_trials=1,  #
-    num_nodes=11,  #
-    pco_node=PCONode10,
-    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
-    # topo=nx.complete_graph,
-    random_seed=1716397169129424000,
-    # random_seed=1,
-    topo_params={'m1': 5, 'm2': 1}  # seed
-)
-
-pco11_config = TrialConfig(
-    testing=False,  #
-    logging_on=True,#True,
-    overall_mult=1000,
-    reception_loop_ticks=100,
-    default_period_length=100 * 1000,  # 100 * 1000,
-    sim_time=2000 * 1000,
-    ms_prob=0,  # 1.0,  # todo: make optional?
-    m_to_px=90,
-    distance_exponent=15,
-    clock_drift_rate_offset_range=100,
-    clock_drift_variability=0.05,
-    min_initial_time_offset=0,
-    max_initial_time_offset=200,
-    sync_epsilon=2,
-    sync_num_ticks=1.0,
-    # todo: make file path dynamic? or not?
-    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
-    num_trials=1,  #
-    num_nodes=11,  #
-    pco_node=PCONode11,
-    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
-    # topo=nx.complete_graph,
-    # random_seed=1716479335215471000, # new
-    # random_seed=1716397169129424000, # old
-    # random_seed=1,
-    # random_seed=1716481176644257000,
-    random_seed=1716487496174745000,
-    topo_params={'m1': 5, 'm2': 1}  # seed
-)
-
-pco12_config = TrialConfig(
-    testing=False,  #
-    logging_on=True,#True,
-    overall_mult=1000,
-    reception_loop_ticks=100,
-    default_period_length=200*1000,#100 * 1000,  # 100 * 1000,
-    sim_time=2000 * 1000,
-    ms_prob=0,  # 1.0,  # todo: make optional?
-    m_to_px=90,
-    distance_exponent=15,
-    clock_drift_rate_offset_range=50,#100,
-    clock_drift_variability=0.05,
-    min_initial_time_offset=0,
-    max_initial_time_offset=199,
-    sync_epsilon=2,
-    sync_num_ticks=1.0,
-    # todo: make file path dynamic? or not?
-    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
-    num_trials=1,  #
-    num_nodes=11,  #
-    pco_node=PCONode12,
-    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
-    # topo=nx.complete_graph,
-    # random_seed=1716479335215471000, # new
-    # random_seed=1716397169129424000, # old
-    # random_seed=1,
-    # random_seed=1716481176644257000,
-
-    # random_seed=1716487496174745000,
-    random_seed=1716558888749055000,
-    topo_params={'m1': 5, 'm2': 1}  # seed
-)
-
-pco13_config = TrialConfig(
-    testing=False,  #
-    logging_on=True,#True,
-    overall_mult=1000,
-    reception_loop_ticks=100,
-    default_period_length=100*1000,#100 * 1000,  # 100 * 1000,
-    sim_time=2000 * 1000,
-    ms_prob=1,  # 1.0,  # todo: make optional?
-    m_to_px=90,
-    distance_exponent=15,
-    clock_drift_rate_offset_range=50,#100,
-    clock_drift_variability=0.05,
-    min_initial_time_offset=0,
-    max_initial_time_offset=199,
-    sync_epsilon=2,
-    sync_num_ticks=1.0,
-    # todo: make file path dynamic? or not?
-    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
-    num_trials=1,  #
-    num_nodes=11,  #
-    pco_node=PCONode13,
-    # topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
-    # topo=nx.complete_graph,
-    topo=nx.random_internet_as_graph,
-    # random_seed=1716479335215471000, # new
-    # random_seed=1716397169129424000, # old
-    random_seed=1,
-    # random_seed=1716481176644257000,
-
-    # random_seed=1716487496174745000,
-    # random_seed=1716558888749055000,
-    # topo_params={'m1': 5, 'm2': 1}  # seed
-)
-
-randomizedPcoNode4_config = TrialConfig(
-    testing=False,  #
-    logging_on=True,#True,
-    overall_mult=1000,
-    reception_loop_ticks=100,
-    default_period_length=100*1000,#100 * 1000,  # 100 * 1000,
+    default_period_length=100 * 1000,
     sim_time=2000 * 1000,
     ms_prob=0.0,  # 1.0,  # todo: make optional?
     m_to_px=90,
     distance_exponent=15,
-    clock_drift_rate_offset_range=50,#100,
+    clock_drift_rate_offset_range=50,  # 100,
     clock_drift_variability=0.05,
     min_initial_time_offset=0,
     max_initial_time_offset=199,
     sync_epsilon=2,
-    sync_num_ticks=1.0,
+    sync_num_ticks=1,
     # todo: make file path dynamic? or not?
     file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
-    num_trials=1,  #
-    num_nodes=11,  #
-    # num_nodes=5,  #
+    num_trials=1,
+    phase_diff_percentage_threshold=0.02,
+    num_nodes=11,
+    # num_nodes=5,
     pco_node=RandomizedPCONode4,
     topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
     # topo=nx.complete_graph,
     # topo=nx.random_internet_as_graph,
-    # random_seed=1716479335215471000, # new
-    # random_seed=1716397169129424000, # old
-    # random_seed=1,
-    # random_seed=1716481176644257000,
-
-    # random_seed=1716487496174745000,
-    # random_seed=1716558888749055000,
     random_seed=1716582139984242000,
-    topo_params={'m1': 5, 'm2': 1}  # seed
+    topo_params={'m1': 5, 'm2': 1},  # seed
 )
 
 if __name__ == '__main__':

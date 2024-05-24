@@ -1,13 +1,12 @@
-from dataclasses import dataclass
-from typing import Optional
-
 import numpy as np  # todo: replace with cupy on linux?
 
 
 class RandomizedPCONode4:
-    """Adding epochs to Randomized Phase algorithm."""
+    """
+    Adding exponential backoff and message suppression to RandomizedPCONode3. (My algo, needs a snappier name)
+    """
 
-    name = "Randomized Phase PCO (Schmidt et al.) version 4"
+    name = "Modified Random-Phase PCO version 4"
 
     def __init__(self, env, init_state, logging):
         """Initialise the node with a given *env*, *initial state*, and *logging* handle."""
@@ -15,6 +14,7 @@ class RandomizedPCONode4:
         self.env = env
         self.logging = logging
 
+        # set initial state
         self.id = init_state.id
         self.overall_mult = init_state.overall_mult
         self.RECEPTION_LOOP_TICKS = init_state.RECEPTION_LOOP_TICKS
@@ -22,7 +22,6 @@ class RandomizedPCONode4:
         self.MS_PROB = init_state.MS_PROB
         self.M_TO_PX = init_state.M_TO_PX
         self.DISTANCE_EXPONENT = init_state.DISTANCE_EXPONENT
-
         self.clock_drift_scale = init_state.clock_drift_scale
         self.pos = init_state.pos
         self.rng = np.random.default_rng(init_state.rng_seed)
@@ -35,23 +34,29 @@ class RandomizedPCONode4:
                                                   self.clock_drift_rate_offset_range)
         self.LOGGING_ON = init_state.LOGGING_ON
         self.neighbors = init_state.neighbors
+        self.phase_diff_percentage_threshold = init_state.phase_diff_percentage_threshold
 
-        # set externally
+        # set externally post initialization
         self.all_nodes = None
 
         # externally accessible
         self.buffer = []
 
-        # used by main loop
+        # used for phase synchronization
         self.phase = 0
         self.period = self.DEFAULT_PERIOD_LENGTH
+
+        # used for epoch synchronization
+        self.epoch = 0
+
+        # used for exp. backoff
         self.next_fire = self.rng.integers(0, self.period)
         self.firing_counter = 0
         self.firing_interval_high = 8 * self.period
         self.firing_interval_low = 1 * self.period
         self.firing_interval = self.firing_interval_low
-        self.epoch = 0
 
+        # used for message suppression
         self.c = 0
         self.k = 1
 
@@ -84,7 +89,6 @@ class RandomizedPCONode4:
 
                     self.phase = msg_phase
 
-
                     self.firing_interval = self.firing_interval_low
                     self.next_fire = self.rng.integers(0, self.firing_interval)
                     self.firing_counter = 0
@@ -95,31 +99,42 @@ class RandomizedPCONode4:
                     self.phase = msg_phase
 
                     # we are more than 10% behind the message
-                    if phase_diff_percentage >= 0.02: # todo make hyperparam
+                    if phase_diff_percentage >= self.phase_diff_percentage_threshold:
                         self.firing_interval = self.firing_interval_low
                         self.next_fire = self.rng.integers(0, self.firing_interval)
                         self.firing_counter = 0
                         self.c = 0
+
+                    # we're close enough to be synced
                     else:
                         self.c += 1
-                        # we're close enough to be synced
                         pass
+
+                # todo: make enabling this a hyper-param -- has anti-synergy with low k values
+                # elif msg_epoch < self.epoch:
+                #     # they're out of sync and we should fire to let them know.
+                #     # self.firing_interval = self.firing_interval_low
+                #     self.log('fired: update broadcast')
+                #     self._tx((self.phase, self.epoch))
+                #     self.log_fire_update()
 
                 # we're ahead
                 else:
                     pass
 
-            # timer expired
-            if self.firing_counter >= self.next_fire and self.c < self.k:  #:
+            # timer until next fire expired
+            if self.firing_counter >= self.next_fire and self.c < self.k:
                 self.log('fired: broadcast')
                 self._tx((self.phase, self.epoch))
                 self.log_fire()
                 self.next_fire = self.rng.integers(0, self.firing_interval)  # todo: add intervals to this
                 self.firing_counter = 0
 
+            # epoch timer expired
             if self.phase >= self.period:
                 self.phase = 0
                 self.epoch += 1
+
                 # double the interval on each epoch expiry
                 self.firing_interval = min(2 * self.firing_interval, self.firing_interval_high)
 
@@ -147,15 +162,12 @@ class RandomizedPCONode4:
         if not self.neighbors:
             raise RuntimeError('There are no neighbors to send to.')
 
+        # todo: make reception model more complex:
+        #   make reception dependent signal to noise ratio, like (Schmidt et al.)
+        #   Including distance / position, transmit power, and interference
         for neighbor in self.neighbors:
-            # distance = distance_euc(self.pos, neighbor.pos) / self.M_TO_PX
-            # reception_prob = reception_probability(distance, self.DISTANCE_EXPONENT)
-            # message reception probability proportional to inverse distance squared
-            # if random.random() < self.NEIGHBOR_RECEPTION_PROB:
-            # if self.rng.random() < reception_prob:
-            if True:
-                self.all_nodes[neighbor].buffer.append(message)
-                self.log_reception(neighbor)
+            self.all_nodes[neighbor].buffer.append(message)
+            self.log_reception(neighbor)
 
     def log(self, *message):
         """Log a message with the current time and node id."""
@@ -171,7 +183,6 @@ class RandomizedPCONode4:
     def log_phase_helper(self, phase_val):
         """needed to instantly set next env tick phase to 0, otherwise waits until next large tick to set to zero,
         messing up the interpolation when graphing"""
-        # if self.phase >= self.period:
         self.logging.node_phase_x[self.id].append(self.env.now - self._last_tick_len)
         self.logging.node_phase_y[self.id].append(phase_val)
         self.logging.node_phase_percentage_x[self.id].append(self.env.now - self._last_tick_len)
@@ -181,9 +192,9 @@ class RandomizedPCONode4:
         self.logging.fire_x.append(self.env.now)
         self.logging.fire_y.append(self.id)
 
-    # def log_suppress(self):
-    #     self.logging.suppress_x.append(self.env.now)
-    #     self.logging.suppress_y.append(self.id)
+    def log_fire_update(self):
+        self.logging.fire_update_x.append(self.env.now)
+        self.logging.fire_update_y.append(self.id)
 
     def log_epoch(self):
         self.logging.node_epochs_x[self.id].append(self.env.now)
