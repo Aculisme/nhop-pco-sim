@@ -15,9 +15,13 @@ import time
 
 from pcoNode10 import PCONode10
 from pcoNode11 import PCONode11
+from pcoNode12 import PCONode12
+from pcoNode13 import PCONode13
 from pcoNode8 import PCONode8
 from pcoNode9 import PCONode9
+from randomizedPcoNode1 import RandomizedPCONode1
 from randomizedPcoNode2 import RandomizedPCONode2
+from randomizedPcoNode3 import RandomizedPCONode3
 
 
 @dataclass
@@ -354,7 +358,7 @@ def run_trial(trial_config):
         for i, metric_text in enumerate(metrics):
             plt.text(.50, .96 - .1 * i, metric_text, ha='left', va='top', transform=ax[3].transAxes)
 
-        plt.show()
+
 
     # todo: calculate properties about the graph, like connectivity, average degree, etc.
     # todo: store adjacency matrix, etc. for later analysis in different file?
@@ -373,6 +377,8 @@ def worker(i, config, q):
     print("running trial", i, "of", config.num_trials)
     m = run_trial(config)
     res_string = m.to_csv()
+    print(res_string)
+    plt.show()
     q.put(res_string)
     return res_string
 
@@ -533,10 +539,114 @@ pco11_config = TrialConfig(
     topo_params={'m1': 5, 'm2': 1}  # seed
 )
 
+pco12_config = TrialConfig(
+    testing=False,  #
+    logging_on=True,#True,
+    overall_mult=1000,
+    reception_loop_ticks=100,
+    default_period_length=200*1000,#100 * 1000,  # 100 * 1000,
+    sim_time=2000 * 1000,
+    ms_prob=0,  # 1.0,  # todo: make optional?
+    m_to_px=90,
+    distance_exponent=15,
+    clock_drift_rate_offset_range=50,#100,
+    clock_drift_variability=0.05,
+    min_initial_time_offset=0,
+    max_initial_time_offset=199,
+    sync_epsilon=2,
+    sync_num_ticks=1.0,
+    # todo: make file path dynamic? or not?
+    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
+    num_trials=1,  #
+    num_nodes=11,  #
+    pco_node=PCONode12,
+    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
+    # topo=nx.complete_graph,
+    # random_seed=1716479335215471000, # new
+    # random_seed=1716397169129424000, # old
+    # random_seed=1,
+    # random_seed=1716481176644257000,
+
+    # random_seed=1716487496174745000,
+    random_seed=1716558888749055000,
+    topo_params={'m1': 5, 'm2': 1}  # seed
+)
+
+pco13_config = TrialConfig(
+    testing=False,  #
+    logging_on=True,#True,
+    overall_mult=1000,
+    reception_loop_ticks=100,
+    default_period_length=100*1000,#100 * 1000,  # 100 * 1000,
+    sim_time=2000 * 1000,
+    ms_prob=1,  # 1.0,  # todo: make optional?
+    m_to_px=90,
+    distance_exponent=15,
+    clock_drift_rate_offset_range=50,#100,
+    clock_drift_variability=0.05,
+    min_initial_time_offset=0,
+    max_initial_time_offset=199,
+    sync_epsilon=2,
+    sync_num_ticks=1.0,
+    # todo: make file path dynamic? or not?
+    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
+    num_trials=1,  #
+    num_nodes=11,  #
+    pco_node=PCONode13,
+    # topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
+    # topo=nx.complete_graph,
+    topo=nx.random_internet_as_graph,
+    # random_seed=1716479335215471000, # new
+    # random_seed=1716397169129424000, # old
+    random_seed=1,
+    # random_seed=1716481176644257000,
+
+    # random_seed=1716487496174745000,
+    # random_seed=1716558888749055000,
+    # topo_params={'m1': 5, 'm2': 1}  # seed
+)
+
+randomizedPcoNode3_config = TrialConfig(
+    testing=False,  #
+    logging_on=True,#True,
+    overall_mult=1000,
+    reception_loop_ticks=100,
+    default_period_length=100*1000,#100 * 1000,  # 100 * 1000,
+    sim_time=2000 * 1000,
+    ms_prob=0.0,  # 1.0,  # todo: make optional?
+    m_to_px=90,
+    distance_exponent=15,
+    clock_drift_rate_offset_range=50,#100,
+    clock_drift_variability=0.05,
+    min_initial_time_offset=0,
+    max_initial_time_offset=199,
+    sync_epsilon=2,
+    sync_num_ticks=1.0,
+    # todo: make file path dynamic? or not?
+    file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
+    num_trials=1,  #
+    num_nodes=11,  #
+    # num_nodes=5,  #
+    pco_node=RandomizedPCONode3,
+    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
+    # topo=nx.complete_graph,
+    # topo=nx.random_internet_as_graph,
+    # random_seed=1716479335215471000, # new
+    # random_seed=1716397169129424000, # old
+    # random_seed=1,
+    # random_seed=1716481176644257000,
+
+    # random_seed=1716487496174745000,
+    # random_seed=1716558888749055000,
+    random_seed=1716582139984242000,
+    topo_params={'m1': 5, 'm2': 1}  # seed
+)
+
 if __name__ == '__main__':
     # todo: make separate file for each or not? give them a name property?
     # main(default_config)
-    # main(pco11_config)
-    main(replace(pco11_config, pco_node=PCONode8))
-    # main(replace(pco10_config, pco_node=RandomizedPCONode2))
+    main(randomizedPcoNode3_config)
+    # main(replace(pco12_config, pco_node=PCONode8))
+    # main(replace(pco11_config, pco_node=PCONode8))
+    # main(replace(pco12_config, pco_node=RandomizedPCONode2))
     # main(randomized_pco_config)

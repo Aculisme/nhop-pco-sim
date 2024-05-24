@@ -7,7 +7,7 @@ import numpy as np  # todo: replace with cupy on linux?
 class RandomizedPCONode2:
     """Adding epochs to Randomized Phase algorithm."""
 
-    name = "Randomized Phase PCO (Schmidt et al.)"
+    name = "Randomized Phase PCO (Schmidt et al.) version 2"
 
     def __init__(self, env, init_state, logging):  # , state):
         """Initialise the node with a given *env*, *initial state*, and *logging* handle."""

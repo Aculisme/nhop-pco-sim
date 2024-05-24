@@ -4,10 +4,10 @@ from typing import Optional
 import numpy as np  # todo: replace with cupy on linux?
 
 
-class PCONode11:
+class PCONode12:
     """WORKING randomized phase algorithm with epochs."""
 
-    name = "FiGo Epochs Algorithm Version 11"
+    name = "FiGo Epochs Algorithm Version 12"
 
     def __init__(self, env, init_state, logging):  # , state):
         """Initialise the node with a given *env*, *initial state*, and *logging* handle."""
@@ -49,9 +49,10 @@ class PCONode11:
         self.next_starting_phase = 0
         self.firing_phase = self.rng.integers(0, self.DEFAULT_PERIOD_LENGTH)
         self.fired = 0
-        self.firing_interval_long = 8 * self.DEFAULT_PERIOD_LENGTH
-        self.firing_interval_short = self.DEFAULT_PERIOD_LENGTH
-        self.firing_interval = self.firing_interval_short
+        self.firing_interval_high = 8  # * self.DEFAULT_PERIOD_LENGTH
+        self.firing_interval_low = 1  # self.DEFAULT_PERIOD_LENGTH
+        self.firing_interval = self.firing_interval_low
+        self.fires_counter = 0
         # self.c = 0  # counter for number of 'identical' messages received
         # self.k = 3  # todo: this is arb. currently #len(self.neighbors)  # threshold for message suppression
 
@@ -93,17 +94,29 @@ class PCONode11:
 
                     self.next_starting_phase = (self.period - phase_diff) % self.period  # abs(phase_diff) # todo: fix
                     self.log_fire_update()
+                    self.firing_interval = self.firing_interval_low
+                    self.log('firing interval reset (∆ < -1>')
 
                 # we're behind, but within a period. We need to change our phase to match theirs.
                 elif -1 <= delta < 0:
-                    # max() is necessary so that we don't synch to a message that is later than the one we're already
-                    # synced to
+                    # we don't want to synch to a message that is later than one we've already synced to
                     # todo: probably could put this higher up in the if-elif-else chain
-                    self.next_starting_phase = max((self.period - phase_diff) % self.period, self.next_starting_phase)
+                    if (self.period - phase_diff) % self.period > self.next_starting_phase:
+                        self.next_starting_phase = (self.period - phase_diff) % self.period
 
-                # we're ahead by within a period. They should synch to us.
-                # Do nothing.
+                        # todo: probably could put this higher up in the if-elif-else chain
+                        if delta < -0.5:
+                            self.log('firing interval reset (-1 <= ∆ < 0')
+                            self.firing_interval = self.firing_interval_low
+
+                # we're ahead by within a period. They should synch to us. Do nothing.
                 elif 0 <= delta < 1:
+
+                    # we hear that they're quite behind, so should let them know.
+                    if delta > 0.5:
+                        self.log('firing interval reset (0 <= ∆ < 1)')
+                        self.firing_interval = self.firing_interval_low
+
                     pass
 
                 # the message received was more than an epoch behind, so they're out of synch.
@@ -116,12 +129,21 @@ class PCONode11:
             # Firing phase reached, broadcast message
             if self.phase >= self.firing_phase and not self.fired:
                 self.fired = 1
-                # todo: if self.c < self.k: # message supression
+
+                # self.fires_counter += 1
+                # if self.fires_counter < self.firing_interval:
+                # else:
+                # if self.fires_counter >= self.firing_interval:
+                # todo: if self.c < self.k: # message suppression
                 self.log_fire()
                 self._tx((self.id, self.epoch, self.phase))
-
-                self.firing_phase = self.rng.integers(self.phase, self.period + self.phase) % self.period
+                self.firing_phase = self.rng.integers(self.phase + self.period / 2,
+                                                      self.period + self.phase) % self.period
                 # todo: use firing_interval instead, so that it can fire less than once a period
+                # self.fires_counter = 0
+                self.firing_interval = min(2 * self.firing_interval, self.firing_interval_high)
+                # else:
+                #     self.log_suppress()
 
             # timer expired
             if self.phase >= self.period:
@@ -130,8 +152,6 @@ class PCONode11:
                 self.phase = self.next_starting_phase
                 self.next_starting_phase = 0
                 self.fired = 0
-
-                # self.firing_interval = min(2 * self.firing_interval, self.firing_interval_long)
 
             self.log_phase()
             self.log_epoch()
