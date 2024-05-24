@@ -4,10 +4,10 @@ from typing import Optional
 import numpy as np  # todo: replace with cupy on linux?
 
 
-class RandomizedPCONode3:
+class RandomizedPCONode4:
     """Adding epochs to Randomized Phase algorithm."""
 
-    name = "Randomized Phase PCO (Schmidt et al.) version 3"
+    name = "Randomized Phase PCO (Schmidt et al.) version 4"
 
     def __init__(self, env, init_state, logging):
         """Initialise the node with a given *env*, *initial state*, and *logging* handle."""
@@ -47,8 +47,13 @@ class RandomizedPCONode3:
         self.period = self.DEFAULT_PERIOD_LENGTH
         self.next_fire = self.rng.integers(0, self.period)
         self.firing_counter = 0
-        self.fired = 0
+        self.firing_interval_high = 8 * self.period
+        self.firing_interval_low = 1 * self.period
+        self.firing_interval = self.firing_interval_low
         self.epoch = 0
+
+        self.c = 0
+        self.k = 1
 
         # start the main loop
         self._main_loop = self.env.process(self._main())
@@ -68,31 +73,58 @@ class RandomizedPCONode3:
                 new_msg = self.buffer.pop()
                 msg_phase, msg_epoch = new_msg
 
+                phase_diff_percentage = (msg_phase - self.phase) / self.period
+
                 if msg_epoch > self.epoch:
                     self.epoch = msg_epoch
+
+                    # simulation artefact:
+                    if self.phase > msg_phase:
+                        self.log_phase_helper(msg_phase)
+
                     self.phase = msg_phase
-                    self.next_fire = self.rng.integers(0, self.period)
+
+
+                    self.firing_interval = self.firing_interval_low
+                    self.next_fire = self.rng.integers(0, self.firing_interval)
                     self.firing_counter = 0
+
+                    self.c = 0
 
                 elif msg_epoch == self.epoch and msg_phase > self.phase:
                     self.phase = msg_phase
-                    self.next_fire = self.rng.integers(0, self.period)
-                    self.firing_counter = 0
 
+                    # we are more than 10% behind the message
+                    if phase_diff_percentage >= 0.02: # todo make hyperparam
+                        self.firing_interval = self.firing_interval_low
+                        self.next_fire = self.rng.integers(0, self.firing_interval)
+                        self.firing_counter = 0
+                        self.c = 0
+                    else:
+                        self.c += 1
+                        # we're close enough to be synced
+                        pass
+
+                # we're ahead
                 else:
                     pass
 
             # timer expired
-            if self.firing_counter >= self.next_fire:
+            if self.firing_counter >= self.next_fire and self.c < self.k:  #:
                 self.log('fired: broadcast')
                 self._tx((self.phase, self.epoch))
                 self.log_fire()
-                self.next_fire = self.rng.integers(0, self.period) # todo: add intervals to this
+                self.next_fire = self.rng.integers(0, self.firing_interval)  # todo: add intervals to this
                 self.firing_counter = 0
 
             if self.phase >= self.period:
                 self.phase = 0
                 self.epoch += 1
+                # double the interval on each epoch expiry
+                self.firing_interval = min(2 * self.firing_interval, self.firing_interval_high)
+
+                # simulation artefact
+                self.log_phase_helper(0)
 
             self.log_epoch()
             self.log_phase()
@@ -105,8 +137,8 @@ class RandomizedPCONode3:
 
             self.phase += self.RECEPTION_LOOP_TICKS
             self.firing_counter += self.RECEPTION_LOOP_TICKS
-            self.log_phase_helper()
 
+            self._last_tick_len = tick_len
             yield self.env.timeout(tick_len)
 
     def _tx(self, message):
@@ -136,14 +168,14 @@ class RandomizedPCONode3:
         self.logging.node_phase_percentage_x[self.id].append(self.env.now)
         self.logging.node_phase_percentage_y[self.id].append((self.phase / max(self.period, 1)) * 100)
 
-    def log_phase_helper(self):
+    def log_phase_helper(self, phase_val):
         """needed to instantly set next env tick phase to 0, otherwise waits until next large tick to set to zero,
         messing up the interpolation when graphing"""
-        if self.phase >= self.period:
-            self.logging.node_phase_x[self.id].append(self.env.now)
-            self.logging.node_phase_y[self.id].append(0)
-            self.logging.node_phase_percentage_x[self.id].append(self.env.now)
-            self.logging.node_phase_percentage_y[self.id].append(0)
+        # if self.phase >= self.period:
+        self.logging.node_phase_x[self.id].append(self.env.now - self._last_tick_len)
+        self.logging.node_phase_y[self.id].append(phase_val)
+        self.logging.node_phase_percentage_x[self.id].append(self.env.now - self._last_tick_len)
+        self.logging.node_phase_percentage_y[self.id].append((phase_val / max(self.period, 1)) * 100)
 
     def log_fire(self):
         self.logging.fire_x.append(self.env.now)

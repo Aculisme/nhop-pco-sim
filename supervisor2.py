@@ -22,6 +22,7 @@ from pcoNode9 import PCONode9
 from randomizedPcoNode1 import RandomizedPCONode1
 from randomizedPcoNode2 import RandomizedPCONode2
 from randomizedPcoNode3 import RandomizedPCONode3
+from randomizedPcoNode4 import RandomizedPCONode4
 
 
 @dataclass
@@ -606,7 +607,7 @@ pco13_config = TrialConfig(
     # topo_params={'m1': 5, 'm2': 1}  # seed
 )
 
-randomizedPcoNode3_config = TrialConfig(
+randomizedPcoNode4_config = TrialConfig(
     testing=False,  #
     logging_on=True,#True,
     overall_mult=1000,
@@ -627,7 +628,7 @@ randomizedPcoNode3_config = TrialConfig(
     num_trials=1,  #
     num_nodes=11,  #
     # num_nodes=5,  #
-    pco_node=RandomizedPCONode3,
+    pco_node=RandomizedPCONode4,
     topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
     # topo=nx.complete_graph,
     # topo=nx.random_internet_as_graph,
@@ -644,9 +645,7 @@ randomizedPcoNode3_config = TrialConfig(
 
 if __name__ == '__main__':
     # todo: make separate file for each or not? give them a name property?
-    # main(default_config)
-    main(randomizedPcoNode3_config)
-    # main(replace(pco12_config, pco_node=PCONode8))
-    # main(replace(pco11_config, pco_node=PCONode8))
-    # main(replace(pco12_config, pco_node=RandomizedPCONode2))
-    # main(randomized_pco_config)
+    main(randomizedPcoNode4_config)
+    # main(replace(randomizedPcoNode4_config, pco_node=RandomizedPCONode1))
+    # main(replace(randomizedPcoNode4_config, pco_node=PCONode8, ms_prob=0))
+    # main(replace(randomizedPcoNode4_config, pco_node=PCONode8, ms_prob=1))
