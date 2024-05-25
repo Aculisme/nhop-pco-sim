@@ -3,7 +3,7 @@ import numpy as np  # todo: replace with cupy on linux?
 
 class RandomizedPCONode5:
     """
-    Adding exponential backoff and message suppression to RandomizedPCONode3. (My algo, needs a snappier name)
+    Fixing +1 bug
     """
 
     name = "Modified Random-Phase PCO version 5"
@@ -79,31 +79,24 @@ class RandomizedPCONode5:
                 msg_arrival_time, msg_phase, msg_epoch = new_msg
 
                 phase_diff_percentage = (msg_phase - self.phase) / self.period
+                arrival_diff = self.env.now - msg_arrival_time  # simulation artefact
 
                 if msg_epoch > self.epoch:
                     self.epoch = msg_epoch
 
-                    # simulation artefact:
-                    # if self.phase > msg_phase:
-                    self.log_phase_helper(msg_phase)
+                    self.log_phase_helper(msg_phase)  # simulation artefact
 
-                    # if self.phase > msg_phase: # going down
-                    arrival_diff = self.env.now - msg_arrival_time
-                    self.log(arrival_diff)
                     self.phase = msg_phase + arrival_diff
 
                     self.firing_interval = self.firing_interval_low
                     self.next_fire = self.rng.integers(0, self.firing_interval)
                     self.firing_counter = 0
-
                     self.c = 0
 
                 elif msg_epoch == self.epoch and msg_phase > self.phase:
 
-                    self.log_phase_helper(msg_phase)
+                    self.log_phase_helper(msg_phase)  # simulation artefact
 
-                    arrival_diff = self.env.now - msg_arrival_time
-                    self.log(arrival_diff)
                     self.phase = msg_phase + arrival_diff
 
                     # we are more than 10% behind the message
@@ -118,24 +111,24 @@ class RandomizedPCONode5:
                         self.c += 1
                         pass
 
-                # todo: experimental
-                elif msg_epoch == self.epoch and msg_phase < self.phase:
-
-                    # hear a message more than 2% behind
-                    if abs(phase_diff_percentage) >= self.phase_diff_percentage_threshold:
-                        self.firing_interval = self.firing_interval_low
-                        self.next_fire = self.rng.integers(0, self.firing_interval)
-                        self.firing_counter = 0
-                        self.c = 0
-
-                        self.log_fire_update()
+                # # todo: experimental (currently results in worse performance!)
+                # elif msg_epoch == self.epoch and msg_phase < self.phase:
+                #
+                #     # hear a message more than 2% behind
+                #     if abs(phase_diff_percentage) >= self.phase_diff_percentage_threshold:
+                #         self.firing_interval = self.firing_interval_low
+                #         self.next_fire = self.rng.integers(0, self.firing_interval)
+                #         self.firing_counter = 0
+                #         self.c = 0
+                #
+                #         self.log_fire_update()
 
                 # todo: make enabling this a hyper-param -- has anti-synergy with low k values
                 # elif msg_epoch < self.epoch:
                 #     # they're out of sync and we should fire to let them know.
                 #     # self.firing_interval = self.firing_interval_low
                 #     self.log('fired: update broadcast')
-                #     self._tx((self.phase, self.epoch))
+                #     self._tx()
                 #     self.log_fire_update()
 
                 # we're ahead
@@ -158,8 +151,7 @@ class RandomizedPCONode5:
                 # double the interval on each epoch expiry
                 self.firing_interval = min(2 * self.firing_interval, self.firing_interval_high)
 
-                # simulation artefact
-                self.log_phase_helper(0)
+                self.log_phase_helper(0)  # simulation artefact
 
             self.log_epoch()
             self.log_phase()
@@ -170,7 +162,7 @@ class RandomizedPCONode5:
                     1 * self.RECEPTION_LOOP_TICKS + self.clock_drift_rate * 3e-6 * self.RECEPTION_LOOP_TICKS,
                     self.clock_drift_scale * self.RECEPTION_LOOP_TICKS))
 
-            self._last_tick_len = tick_len
+            self._last_tick_len = tick_len  # simulation artefact
             yield self.env.timeout(tick_len)
 
             self.phase += self.RECEPTION_LOOP_TICKS

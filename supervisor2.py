@@ -456,7 +456,7 @@ randomizedPcoNode5_config = TrialConfig(
     sync_num_ticks=1,
     # todo: make file path dynamic? or not?
     file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
-    num_trials=5,
+    num_trials=1,
     phase_diff_percentage_threshold=0.02,
     k=2,
     num_nodes=32,
@@ -470,6 +470,7 @@ randomizedPcoNode5_config = TrialConfig(
     # topo=nx.random_internet_as_graph,
     # random_seed=1716582139984242000,
     # random_seed=1716631278258634000,
+    random_seed=1716676895879946000,
     # topo_params={'m1': 5, 'm2': 1},  # seed
 )
 
