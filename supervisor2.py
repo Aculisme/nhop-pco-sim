@@ -23,6 +23,7 @@ from randomizedPcoNode1 import RandomizedPCONode1
 from randomizedPcoNode2 import RandomizedPCONode2
 from randomizedPcoNode3 import RandomizedPCONode3
 from randomizedPcoNode4 import RandomizedPCONode4
+from randomizedPcoNode5 import RandomizedPCONode5
 
 
 @dataclass
@@ -49,6 +50,8 @@ class TrialConfig:
     phase_diff_percentage_threshold: float
     pco_node: Callable
     topo: Callable  # nx.Graph generator function
+    show_topo: bool
+    k: Optional[int] = None
     topo_params: Optional[dict] = None  # param : value, passed to generator
     # Setting random_seed will fix all trials to use the exact same random seed. If argument not passed, then each trial
     # will use a different time-based random seed.
@@ -119,6 +122,7 @@ class InitState:
     rng_seed: int
     neighbors: list
     phase_diff_percentage_threshold: float
+    k: Optional[int] = None
 
 
 RESULTS_CSV_HEADER = ','.join([
@@ -194,8 +198,8 @@ def run_trial(trial_config):
     #     print('reception_probabilities:')
     #     pp(reception_probabilities)
 
-    # if not trial_config.testing:
-    #     nx.draw(G, with_labels=True, pos=pos)
+    if trial_config.show_topo:
+        nx.draw(G, with_labels=True, pos=pos)
 
     neighbors_dict = edgelist_to_neighbors(G.edges)
 
@@ -215,6 +219,7 @@ def run_trial(trial_config):
             MS_PROB=trial_config.ms_prob,
             pos=pos[i],
             rng_seed=rng_seed + i,
+            k=trial_config.k,
             LOGGING_ON=trial_config.logging_on,
             neighbors=neighbors_dict[i],
             phase_diff_percentage_threshold=trial_config.phase_diff_percentage_threshold,
@@ -302,7 +307,7 @@ def run_trial(trial_config):
         # Node phase
         for i in range(trial_config.num_nodes):
             ax[0].plot(logging.node_phase_x[i], logging.node_phase_y[i], label='node ' + str(i),
-                       linewidth=(3 if i == 4 or i == 5 or i == 6 else 2),
+                       linewidth=(3 if i == 0 else 2),
                        linestyle='dashdot')
         ax[0].set_title('Node phase')
         ax[0].set(
@@ -360,6 +365,7 @@ def run_trial(trial_config):
             "Random seed: " + str(rng_seed),
             "Phase difference threshold for cancelling exp. backoff: " + str(
                 trial_config.phase_diff_percentage_threshold * 100) + "%",
+            "k (message suppression threshold): " + str(trial_config.k),
         ]
 
         for i, metric_text in enumerate(metrics):
@@ -431,39 +437,47 @@ def main(config):
     pool.join()
 
 
-randomizedPcoNode4_config = TrialConfig(
+randomizedPcoNode5_config = TrialConfig(
     testing=False,
-    logging_on=True,
+    logging_on=False,
+    show_topo=False,
     overall_mult=1000,
     reception_loop_ticks=100,
     default_period_length=100 * 1000,
-    sim_time=2000 * 1000,
+    sim_time=4000 * 1000,
     ms_prob=0.0,  # 1.0,  # todo: make optional?
     m_to_px=90,
     distance_exponent=15,
-    clock_drift_rate_offset_range=50,  # 100,
-    clock_drift_variability=0.05,
+    clock_drift_rate_offset_range=0,#50,  # 100,
+    clock_drift_variability=0.0,#0.05,
     min_initial_time_offset=0,
     max_initial_time_offset=199,
     sync_epsilon=2,
     sync_num_ticks=1,
     # todo: make file path dynamic? or not?
     file_out='/Users/lucamehl/Downloads/nhop-pco-sim/randomized_pco.txt',
-    num_trials=1,
+    num_trials=5,
     phase_diff_percentage_threshold=0.02,
-    num_nodes=11,
+    k=2,
+    num_nodes=32,
     # num_nodes=5,
-    pco_node=RandomizedPCONode4,
-    topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
+    # pco_node=RandomizedPCONode4,
+    pco_node=RandomizedPCONode5,
+    # pco_node=PCONode8,
+    topo=nx.path_graph,
+    # topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
     # topo=nx.complete_graph,
     # topo=nx.random_internet_as_graph,
-    random_seed=1716582139984242000,
-    topo_params={'m1': 5, 'm2': 1},  # seed
+    # random_seed=1716582139984242000,
+    # random_seed=1716631278258634000,
+    # topo_params={'m1': 5, 'm2': 1},  # seed
 )
 
 if __name__ == '__main__':
     # todo: make separate file for each or not? give them a name property?
-    main(randomizedPcoNode4_config)
+    main(randomizedPcoNode5_config)
+    # for i in range(0, 64):
+    #     main(replace(randomizedPcoNode4_config, num_nodes=i, topo_params={'n': i}))
     # main(replace(randomizedPcoNode4_config, pco_node=RandomizedPCONode1))
     # main(replace(randomizedPcoNode4_config, pco_node=PCONode8, ms_prob=0))
-    # main(replace(randomizedPcoNode4_config, pco_node=PCONode8, ms_prob=1))
+    # main(replace(randomizedPcoNode4_config, pco_node=PCONode8, ms_prob=0))

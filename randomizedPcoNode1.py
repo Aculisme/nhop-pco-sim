@@ -34,7 +34,7 @@ class RandomizedPCONode1:
         self.initial_time_offset = self.rng.integers(self.min_initial_time_offset,
                                                      self.max_initial_time_offset)
         self.clock_drift_rate = self.rng.integers(-self.clock_drift_rate_offset_range,
-                                                  self.clock_drift_rate_offset_range)
+                                                  self.clock_drift_rate_offset_range) if init_state.clock_drift_rate_offset_range > 0 else 0
         self.LOGGING_ON = init_state.LOGGING_ON
 
         # set externally

@@ -1,12 +1,12 @@
 import numpy as np  # todo: replace with cupy on linux?
 
 
-class RandomizedPCONode4:
+class RandomizedPCONode5:
     """
     Adding exponential backoff and message suppression to RandomizedPCONode3. (My algo, needs a snappier name)
     """
 
-    name = "Modified Random-Phase PCO version 4"
+    name = "Modified Random-Phase PCO version 5"
 
     def __init__(self, env, init_state, logging):
         """Initialise the node with a given *env*, *initial state*, and *logging* handle."""
@@ -30,7 +30,8 @@ class RandomizedPCONode4:
         self.clock_drift_rate_offset_range = init_state.clock_drift_rate_offset_range
         self.initial_time_offset = self.rng.integers(self.min_initial_time_offset,
                                                      self.max_initial_time_offset)
-        self.clock_drift_rate = self.rng.integers(-self.clock_drift_rate_offset_range, self.clock_drift_rate_offset_range) if init_state.clock_drift_rate_offset_range > 0 else 0
+        self.clock_drift_rate = self.rng.integers(-self.clock_drift_rate_offset_range,
+                                                  self.clock_drift_rate_offset_range) if init_state.clock_drift_rate_offset_range > 0 else 0
         self.LOGGING_ON = init_state.LOGGING_ON
         self.neighbors = init_state.neighbors
         self.phase_diff_percentage_threshold = init_state.phase_diff_percentage_threshold
@@ -51,7 +52,7 @@ class RandomizedPCONode4:
         # used for exp. backoff
         self.next_fire = self.rng.integers(0, self.period)
         self.firing_counter = 0
-        self.firing_interval_high = 16 * self.period
+        self.firing_interval_high = 8 * self.period
         self.firing_interval_low = 1 * self.period
         self.firing_interval = self.firing_interval_low
 
@@ -75,7 +76,7 @@ class RandomizedPCONode4:
             # On message received
             while self.buffer:
                 new_msg = self.buffer.pop()
-                msg_phase, msg_epoch = new_msg
+                msg_arrival_time, msg_phase, msg_epoch = new_msg
 
                 phase_diff_percentage = (msg_phase - self.phase) / self.period
 
@@ -83,20 +84,27 @@ class RandomizedPCONode4:
                     self.epoch = msg_epoch
 
                     # simulation artefact:
-                    if self.phase > msg_phase:
-                        self.log_phase_helper(msg_phase)
+                    # if self.phase > msg_phase:
+                    self.log_phase_helper(msg_phase)
 
-                    self.phase = msg_phase
+                    # if self.phase > msg_phase: # going down
+                    arrival_diff = self.env.now - msg_arrival_time
+                    self.log(arrival_diff)
+                    self.phase = msg_phase + arrival_diff
 
                     self.firing_interval = self.firing_interval_low
                     self.next_fire = self.rng.integers(0, self.firing_interval)
                     self.firing_counter = 0
 
                     self.c = 0
-                    self.log('case 0')
 
                 elif msg_epoch == self.epoch and msg_phase > self.phase:
-                    self.phase = msg_phase
+
+                    self.log_phase_helper(msg_phase)
+
+                    arrival_diff = self.env.now - msg_arrival_time
+                    self.log(arrival_diff)
+                    self.phase = msg_phase + arrival_diff
 
                     # we are more than 10% behind the message
                     if phase_diff_percentage >= self.phase_diff_percentage_threshold:
@@ -109,7 +117,6 @@ class RandomizedPCONode4:
                     else:
                         self.c += 1
                         pass
-                    self.log('case 1')
 
                 # todo: experimental
                 elif msg_epoch == self.epoch and msg_phase < self.phase:
@@ -131,13 +138,6 @@ class RandomizedPCONode4:
                 #     self._tx((self.phase, self.epoch))
                 #     self.log_fire_update()
 
-                # elif msg_epoch < self.epoch:
-                #     # they're out of sync and we should fire to let them know.
-                #     # self.firing_interval = self.firing_interval_low
-                #     self.log('fired: update broadcast')
-                #     self._tx((self.phase, self.epoch))
-                #     self.log_fire_update()
-
                 # we're ahead
                 else:
                     pass
@@ -145,7 +145,7 @@ class RandomizedPCONode4:
             # timer until next fire expired
             if self.firing_counter >= self.next_fire and self.c < self.k:
                 self.log('fired: broadcast')
-                self._tx((self.phase, self.epoch))
+                self._tx()
                 self.log_fire()
                 self.next_fire = self.rng.integers(0, self.firing_interval)  # todo: add intervals to this
                 self.firing_counter = 0
@@ -170,13 +170,13 @@ class RandomizedPCONode4:
                     1 * self.RECEPTION_LOOP_TICKS + self.clock_drift_rate * 3e-6 * self.RECEPTION_LOOP_TICKS,
                     self.clock_drift_scale * self.RECEPTION_LOOP_TICKS))
 
-            self.phase += self.RECEPTION_LOOP_TICKS
-            self.firing_counter += self.RECEPTION_LOOP_TICKS
-
             self._last_tick_len = tick_len
             yield self.env.timeout(tick_len)
 
-    def _tx(self, message):
+            self.phase += self.RECEPTION_LOOP_TICKS
+            self.firing_counter += self.RECEPTION_LOOP_TICKS
+
+    def _tx(self):
         """Broadcast a *message* to all receivers."""
         self.log_fire()
         if not self.neighbors:
@@ -185,8 +185,9 @@ class RandomizedPCONode4:
         # todo: make reception model more complex:
         #   make reception dependent signal to noise ratio, like (Schmidt et al.)
         #   Including distance / position, transmit power, and interference
-        for neighbor in self.neighbors:
-            self.all_nodes[neighbor].buffer.append(message)
+        for i in self.neighbors:
+            neighbor = self.all_nodes[i]
+            neighbor.buffer.append((self.env.now, self.phase, self.epoch))
             self.log_reception(neighbor)
 
     def log(self, *message):
@@ -222,4 +223,4 @@ class RandomizedPCONode4:
 
     def log_reception(self, neighbor):
         self.logging.reception_x.append(self.env.now)
-        self.logging.reception_y.append(self.all_nodes[neighbor].id)
+        self.logging.reception_y.append(neighbor.id)
