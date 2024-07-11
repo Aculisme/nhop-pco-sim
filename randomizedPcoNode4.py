@@ -51,7 +51,7 @@ class RandomizedPCONode4:
         # used for exp. backoff
         self.next_fire = self.rng.integers(0, self.period)
         self.firing_counter = 0
-        self.firing_interval_high = 16 * self.period
+        self.firing_interval_high = 1 * self.period
         self.firing_interval_low = 1 * self.period
         self.firing_interval = self.firing_interval_low
 
@@ -128,15 +128,15 @@ class RandomizedPCONode4:
                 #     # they're out of sync and we should fire to let them know.
                 #     # self.firing_interval = self.firing_interval_low
                 #     self.log('fired: update broadcast')
-                #     self._tx((self.phase, self.epoch))
-                #     self.log_fire_update()
+                #     self.tx((self.phase, self.epoch))
+                #     self._log_fire_update()
 
                 # elif msg_epoch < self.epoch:
                 #     # they're out of sync and we should fire to let them know.
                 #     # self.firing_interval = self.firing_interval_low
                 #     self.log('fired: update broadcast')
-                #     self._tx((self.phase, self.epoch))
-                #     self.log_fire_update()
+                #     self.tx((self.phase, self.epoch))
+                #     self._log_fire_update()
 
                 # we're ahead
                 else:

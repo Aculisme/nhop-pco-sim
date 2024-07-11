@@ -121,22 +121,22 @@ class PCONode10:
 
                 # if no message seen this epoch, broadcast
                 # if self.highest_msg_this_epoch[0] == self.id:
-                #     self._tx((self.id, self.epoch, self.phase))
-                #     self.log_fire()
+                #     self.tx((self.id, self.epoch, self.phase))
+                #     self._log_fire()
 
                 # else:
-                #     self._tx((self.id, self.epoch, self.phase))
-                #     self.log_fire()
+                #     self.tx((self.id, self.epoch, self.phase))
+                #     self._log_fire()
 
                 # 1-MS_PROB chance of overriding message suppression and firing anyway
                 # elif self.rng.random() > self.MS_PROB:
-                #     self._tx((self.id, self.epoch, self.phase))
+                #     self.tx((self.id, self.epoch, self.phase))
 
                 # we just heard a message with an epoch far ahead of our. We were out of sync!
                 # So let everyone else know this as well.
                 # elif self.super_out_of_sync:  # self.highest_msg_this_epoch[0] != self.id:
                 #     self.log('triggered super out of sync broadcast')
-                #     self._tx((self.id, self.epoch, self.phase))
+                #     self.tx((self.id, self.epoch, self.phase))
                 #     self.log_out_of_sync_broadcast()
                 #     self.super_out_of_sync = False
 
@@ -163,7 +163,7 @@ class PCONode10:
 
     def _tx(self, message):
         """Broadcast a *message* to all receivers."""
-        # self.log_fire()
+        # self._log_fire()
         if not self.neighbors:
             raise RuntimeError('There are no neighbors to send to.')
 

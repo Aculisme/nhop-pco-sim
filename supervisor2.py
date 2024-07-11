@@ -52,6 +52,8 @@ class TrialConfig:
     topo: Callable  # nx.Graph generator function
     show_topo: bool
     k: Optional[int] = None
+    firing_interval_low: Optional[int] = None
+    firing_interval_high: Optional[int] = None
     topo_params: Optional[dict] = None  # param : value, passed to generator
     # Setting random_seed will fix all trials to use the exact same random seed. If argument not passed, then each trial
     # will use a different time-based random seed.
@@ -123,6 +125,8 @@ class InitState:
     neighbors: list
     phase_diff_percentage_threshold: float
     k: Optional[int] = None
+    firing_interval_low: Optional[int] = None
+    firing_interval_high: Optional[int] = None
 
 
 RESULTS_CSV_HEADER = ','.join([
@@ -220,6 +224,8 @@ def run_trial(trial_config):
             pos=pos[i],
             rng_seed=rng_seed + i,
             k=trial_config.k,
+            firing_interval_low=trial_config.firing_interval_low,
+            firing_interval_high=trial_config.firing_interval_high,
             LOGGING_ON=trial_config.logging_on,
             neighbors=neighbors_dict[i],
             phase_diff_percentage_threshold=trial_config.phase_diff_percentage_threshold,
@@ -256,11 +262,11 @@ def run_trial(trial_config):
         # node.all_nodes = [nodes[n] for n in range(len(nodes)) if n != i]  # [nodes[n] for n in topo[i]]
         # node.pos = pos[i]
 
-    env.run(until=trial_config.sim_time)
+    env.run(until=trial_config.sim_time * trial_config.overall_mult)
 
     num_broadcasts = len(logging.fire_x)
 
-    x = np.linspace(0, trial_config.sim_time, int(trial_config.sim_time / trial_config.reception_loop_ticks))
+    x = np.linspace(0, trial_config.sim_time * trial_config.overall_mult, int(trial_config.sim_time * trial_config.overall_mult / trial_config.reception_loop_ticks))
 
     interpolated = np.array(
         [np.interp(x, logging.node_phase_percentage_x[i], logging.node_phase_percentage_y[i]) for i in
@@ -278,7 +284,7 @@ def run_trial(trial_config):
     mean_differences = np.mean(differences, axis=0)
     max_differences = np.max(differences, axis=0)
 
-    time_until_synchronization = trial_config.sim_time
+    time_until_synchronization = trial_config.sim_time * trial_config.overall_mult
 
     # Find time until synchronization
     """We consider the network synchronized when the maximum pair-wise phase difference between all nodes at a given tick 
@@ -325,7 +331,7 @@ def run_trial(trial_config):
                    label='node out of sync broadcast',
                    markersize=5)
 
-        ax[1].set_xticks(np.arange(0, trial_config.sim_time + 1, trial_config.default_period_length))
+        ax[1].set_xticks(np.arange(0, trial_config.sim_time * trial_config.overall_mult + 1, trial_config.default_period_length))
         ax[1].grid()
         ax[1].set_title('Fires and suppresses')
         ax[1].set(ylabel='Node ID')
@@ -440,11 +446,11 @@ def main(config):
 randomizedPcoNode5_config = TrialConfig(
     testing=False,
     logging_on=False,
-    show_topo=False,
+    show_topo=True,
     overall_mult=1000,
     reception_loop_ticks=100,
     default_period_length=100 * 1000,
-    sim_time=4000 * 1000,
+    sim_time=4000,# * 1000,
     ms_prob=0.0,  # 1.0,  # todo: make optional?
     m_to_px=90,
     distance_exponent=15,
@@ -459,19 +465,24 @@ randomizedPcoNode5_config = TrialConfig(
     num_trials=1,
     phase_diff_percentage_threshold=0.02,
     k=2,
-    num_nodes=32,
+    firing_interval_low=1,
+    firing_interval_high=16,
+    num_nodes=7,
     # num_nodes=5,
     # pco_node=RandomizedPCONode4,
     pco_node=RandomizedPCONode5,
     # pco_node=PCONode8,
-    topo=nx.path_graph,
+    # topo=nx.path_graph,
+    topo=nx.graph_atlas,
     # topo=nx.barbell_graph,  # todo: note: num_nodes = m1*2 + m2
     # topo=nx.complete_graph,
     # topo=nx.random_internet_as_graph,
     # random_seed=1716582139984242000,
     # random_seed=1716631278258634000,
-    random_seed=1716676895879946000,
+    # random_seed=1716676895879946000,
     # topo_params={'m1': 5, 'm2': 1},  # seed
+    # topo_params={'radius': 5, 'n': 32},  # seed
+    topo_params={'i': 1000},
 )
 
 if __name__ == '__main__':

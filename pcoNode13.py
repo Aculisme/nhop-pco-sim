@@ -95,7 +95,7 @@ class PCONode13:
                     # self.next_starting_phase = (self.period - phase_diff) % self.period  # abs(phase_diff) # todo: fix
                     self.phase = msg_phase  # NEW
 
-                    # self.log_fire_update()
+                    # self._log_fire_update()
                     self.firing_interval = self.firing_interval_low
                     self.log('firing interval reset (∆ < -1>')
 
@@ -128,7 +128,7 @@ class PCONode13:
 
                     pass
                     # self.log_out_of_sync_broadcast()
-                    # self._tx((self.id, self.epoch, self.phase))
+                    # self.tx((self.id, self.epoch, self.phase))
 
             # Firing phase reached, broadcast message
             if self.phase >= self.firing_phase and not self.fired:

@@ -3,6 +3,7 @@ from typing import Optional
 
 import numpy as np  # todo: replace with cupy on linux?
 
+
 # from supervisor2 import distance_euc, reception_probability
 
 
@@ -58,8 +59,10 @@ class RandomizedPCONode1:
         a = 0.5
         if phase_diff <= self.DEFAULT_PERIOD_LENGTH / 2:
             return (1 - a) * phase_diff
+            #       0.5 * phase_diff
         else:
             return (1 - a) * phase_diff + a * self.DEFAULT_PERIOD_LENGTH
+            #       0.5 * phase_diff + 0.5 * period
 
     def _main(self):
         """Main loop for the node"""
@@ -75,9 +78,9 @@ class RandomizedPCONode1:
             if self.buffer:
                 new_msg = self.buffer.pop(0)  # get first message to arrive in buffer
                 msg_firing_phase = new_msg  # [0]
-                phase_diff = (self.phase - msg_firing_phase) % self.period
-                phase_diff_adjusted = self.phase_response_function(phase_diff)
-                self.phase = (phase_diff_adjusted + msg_firing_phase) % self.DEFAULT_PERIOD_LENGTH
+                # phase_diff = (self.phase - msg_firing_phase) % self.period
+                # phase_diff_adjusted = self.phase_response_function(phase_diff)
+                self.phase = msg_firing_phase  # (phase_diff_adjusted + msg_firing_phase) % self.DEFAULT_PERIOD_LENGTH
                 self.buffer.clear()
                 # if self.firing_phase < self.phase:
                 #     self.fired = 1
@@ -154,7 +157,7 @@ class RandomizedPCONode1:
     #     self.logging.suppress_x.append(self.env.now)
     #     self.logging.suppress_y.append(self.id)
 
-    # def log_epoch(self):
+    # def _log_epoch(self):
     #     self.logging.node_epochs_x[self.id].append(self.env.now)
     #     self.logging.node_epochs_y[self.id].append(self.epoch)
 
