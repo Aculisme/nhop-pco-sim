@@ -687,89 +687,91 @@ randomizedPcoNode5_config = TrialConfig(
 )
 
 if __name__ == '__main__':
-    topo_configs = [
-        TopoConfig(
-            topo_name='linear',
-            topo_params={'n': i},
-            topo=nx.path_graph,
-            num_nodes=i,
-        ) for i in [2, 3, 4, 5, 6, 7, 8, 9, 10]  # 9] # +[i for i in range(10, 128, 5)]
-    ]  # + [
-    #     TopoConfig(
-    #         topo_name='barbell',
-    #         topo_params={'m1': i, 'm2': 1},
-    #         topo=nx.barbell_graph,
-    #         num_nodes=2 * i + 1,
-    #     ) for i in [3, 4, 5, 6, 7, 8, 9] + [i for i in range(10, 50, 10)]
-    # ]
 
-    test_config = TestConfig(
-        sim_time=8000,
-        num_trials=100,  # 3,
-        file_out='out/test6.csv',  # /Users/lucamehl/Downloads/nhop-pco-sim/
-    )
-
-    algo_configs = [
-        AlgoConfig(
-            algo_name='RP5',
-            pco_node=RandomizedPCONode5,
-            default_period_length=100 * 1000,
-            clock_drift_rate_offset_range=0,
-            clock_drift_variability=0.05,
-            min_initial_time_offset=0,
-            max_initial_time_offset=199,
-            phase_diff_percentage_threshold=0.02,
-            k=2,
-            backoff_coeff=2,
-            firing_interval_low=1 * (100 * 1000),
-            firing_interval_high=16 * (100 * 1000),
-        ),
-        AlgoConfig(
-            algo_name='PCO8_full',
-            default_period_length=100 * 1000,
-            ms_prob=0.0,
-            clock_drift_rate_offset_range=0,
-            clock_drift_variability=0.05,
-            min_initial_time_offset=0,
-            max_initial_time_offset=199,
-            pco_node=PCONode8,
-        ),
-        AlgoConfig(
-            algo_name='RP1',
-            pco_node=RandomizedPCONode1,
-            default_period_length=100 * 1000,
-            clock_drift_rate_offset_range=0,
-            clock_drift_variability=0.05,
-            min_initial_time_offset=0,
-            max_initial_time_offset=199,
-            # phase_diff_percentage_threshold=0.02,
-            # k=2,
-            # backoff_coeff=2,
-            # firing_interval_low=1 * (100 * 1000),
-            # firing_interval_high=16 * (100 * 1000),
-        ),
-        AlgoConfig(
-            algo_name='PCO8_ms',
-            default_period_length=100 * 1000,
-            ms_prob=1.0,
-            clock_drift_rate_offset_range=0,
-            clock_drift_variability=0.05,
-            min_initial_time_offset=0,
-            max_initial_time_offset=199,
-            pco_node=PCONode8,
-        )
-    ]
-
+    # OPTION 1: RUN A SINGLE TRIAL WITH A SINGLE TOPOLOGY AND ALGORITHM
     run_trial(randomizedPcoNode5_config)
+
+    # OPTION 2: RUN A TEST WITH MULTIPLE TOPOLOGIES AND ALGORITHMS
+
+    # topo_configs = [
+    #     TopoConfig(
+    #         topo_name='linear',
+    #         topo_params={'n': i},
+    #         topo=nx.path_graph,
+    #         num_nodes=i,
+    #     ) for i in [2, 3, 4, 5, 6, 7, 8, 9, 10]  # 9] # +[i for i in range(10, 128, 5)]
+    # ]  # + [
+    # #     TopoConfig(
+    # #         topo_name='barbell',
+    # #         topo_params={'m1': i, 'm2': 1},
+    # #         topo=nx.barbell_graph,
+    # #         num_nodes=2 * i + 1,
+    # #     ) for i in [3, 4, 5, 6, 7, 8, 9] + [i for i in range(10, 50, 10)]
+    # # ]
+    #
+    # test_config = TestConfig(
+    #     sim_time=8000,
+    #     num_trials=100,  # 3,
+    #     file_out='out/test6.csv',  # /Users/lucamehl/Downloads/nhop-pco-sim/
+    # )
+    #
+    # algo_configs = [
+    #     AlgoConfig(
+    #         algo_name='RP5',
+    #         pco_node=RandomizedPCONode5,
+    #         default_period_length=100 * 1000,
+    #         clock_drift_rate_offset_range=0,
+    #         clock_drift_variability=0.05,
+    #         min_initial_time_offset=0,
+    #         max_initial_time_offset=199,
+    #         phase_diff_percentage_threshold=0.02,
+    #         k=2,
+    #         backoff_coeff=2,
+    #         firing_interval_low=1 * (100 * 1000),
+    #         firing_interval_high=16 * (100 * 1000),
+    #     ),
+    #     AlgoConfig(
+    #         algo_name='PCO8_full',
+    #         default_period_length=100 * 1000,
+    #         ms_prob=0.0,
+    #         clock_drift_rate_offset_range=0,
+    #         clock_drift_variability=0.05,
+    #         min_initial_time_offset=0,
+    #         max_initial_time_offset=199,
+    #         pco_node=PCONode8,
+    #     ),
+    #     AlgoConfig(
+    #         algo_name='RP1',
+    #         pco_node=RandomizedPCONode1,
+    #         default_period_length=100 * 1000,
+    #         clock_drift_rate_offset_range=0,
+    #         clock_drift_variability=0.05,
+    #         min_initial_time_offset=0,
+    #         max_initial_time_offset=199,
+    #         # phase_diff_percentage_threshold=0.02,
+    #         # k=2,
+    #         # backoff_coeff=2,
+    #         # firing_interval_low=1 * (100 * 1000),
+    #         # firing_interval_high=16 * (100 * 1000),
+    #     ),
+    #     AlgoConfig(
+    #         algo_name='PCO8_ms',
+    #         default_period_length=100 * 1000,
+    #         ms_prob=1.0,
+    #         clock_drift_rate_offset_range=0,
+    #         clock_drift_variability=0.05,
+    #         min_initial_time_offset=0,
+    #         max_initial_time_offset=199,
+    #         pco_node=PCONode8,
+    #     )
+    # ]
 
     # run_test(topo_configs, algo_configs, test_config)
     # analyze_results(test_config, topo_configs, algo_configs)
 
-    # print(linear_topo_configs)
+    # For option 2, use the following to save the topologies if needed
     # PIK = "topo_configs/linear_topo_configs_v1.dat"
     # with open(PIK, "wb") as f:
     #     pickle.dump(linear_topo_configs, f)
-
-    # main(randomizedPcoNode5_config)
 
     # todo: fix +1 bug in RP1, PCO8?
